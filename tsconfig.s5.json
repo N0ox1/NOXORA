@@ -1,0 +1,42 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["node"],
+    "baseUrl": "."
+  },
+  "include": [
+    "next-env.d.ts",
+    "src/app/api/health/**/*",
+    "src/app/api/clients/**/*",
+    "src/app/api/services/**/*",
+    "src/app/api/employees/**/*",
+    "src/app/api/appointments/**/*",
+    "src/app/api/public/**/*",
+    "src/lib/prisma.ts",
+    "src/lib/http.ts",
+    "src/lib/tenant.ts",
+    "src/lib/rateLimitPublic.ts",
+    "src/lib/idempotency.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "tests",
+    "playwright.config.ts",
+    "cypress.config.ts",
+    "drizzle.config.ts",
+    "src/lib/jobs/**",
+    "src/lib/logger.ts",
+    "src/lib/middleware.ts",
+    "src/lib/mock/**",
+    "src/lib/notifications/**",
+    "src/lib/optimistic-lock.ts",
+    "src/lib/queue/**",
+    "src/lib/rate-limit.ts",
+    "src/lib/reporting/**",
+    "src/lib/webhooks/**",
+    "src/lib/stripe.ts",
+    "src/types/**"
+  ]
+}

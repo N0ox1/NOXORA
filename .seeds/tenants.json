@@ -1,0 +1,14 @@
+{
+  "A": {
+    "tenantId": "cmf75rzl50000ua781bk91jmq",
+    "email": "seed.A.1757096312472@noxora.dev",
+    "password": "OwnerP@ssw0rd1!",
+    "serviceId": "cmf75rztl0006ua78yu5rh2j2"
+  },
+  "B": {
+    "tenantId": "cmf75rzvq0007ua783z6t58hw",
+    "email": "seed.B.1757096312799@noxora.dev",
+    "password": "OwnerP@ssw0rd1!",
+    "serviceId": "cmf75s01y000dua78bq0pcqn0"
+  }
+}

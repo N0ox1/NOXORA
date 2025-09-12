@@ -1,0 +1,20 @@
+{
+  "schemas": {
+    "Tenant": { "id": "string", "name": "string", "plan": "STARTER|PRO|SCALE", "status": "ACTIVE|PAST_DUE|CANCELED|TRIALING" },
+    "Barbershop": { "id": "string", "tenant_id": "string", "slug": "string:unique_per_tenant", "name": "string", "is_active": "bool" },
+    "Employee": { "id": "string", "tenant_id": "string", "barbershop_id": "string", "name": "string", "role": "OWNER|MANAGER|BARBER|ASSISTANT", "active": "bool" },
+    "Service": { "id": "string", "tenant_id": "string", "barbershop_id": "string", "name": "string", "duration_min": "int", "price_cents": "int", "is_active": "bool" },
+    "Client": { "id": "string", "tenant_id": "string", "name": "string", "phone": "string" },
+    "Appointment": {
+      "id": "string","tenant_id": "string","barbershop_id": "string",
+      "employee_id": "string","client_id": "string","service_id": "string",
+      "start_at": "Date","end_at": "Date","status": "PENDING|CONFIRMED|CANCELED|NO_SHOW|DONE"
+    }
+  },
+  "indices": [
+    "unique: Barbershop(tenant_id, slug)",
+    "index: Appointment(tenant_id, barbershop_id, start_at)"
+  ]
+}
+
+

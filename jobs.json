@@ -1,0 +1,7 @@
+{
+  "queues": ["default", "notifications", "billing"],
+  "scheduled": [
+    { "name": "send_reminders", "cron": "*/5 * * * *", "queue": "notifications" },
+    { "name": "billing_reconciliation", "cron": "0 3 * * *", "queue": "billing" }
+  ]
+}
