@@ -1,0 +1,94 @@
+{
+  "publishableKey": "pk_test_placeholder_key_here",
+  "secretKey": "sk_test_placeholder_key_here",
+  "webhookSecret": "whsec_placeholder_webhook_secret_here",
+  "webhookEndpoint": "/api/v1/webhooks/stripe",
+  "idempotency": {
+    "enabled": true,
+    "keyPrefix": "stripe:event:",
+    "dedupeBy": "event.id"
+  },
+  "reconciliation": {
+    "enabled": true,
+    "frequency": "daily",
+    "cron": "0 3 * * *"
+  },
+  "billingPortal": {
+    "enabled": true,
+    "returnUrl": "https://app.noxora.dev/account/billing"
+  },
+  "plans": [
+    {
+      "code": "starter",
+      "product": {
+        "name": "Starter",
+        "productId": null
+      },
+      "prices": [
+        {
+          "cadence": "monthly",
+          "priceId": null,
+          "currency": "BRL",
+          "unitAmount": 2900
+        },
+        {
+          "cadence": "yearly",
+          "priceId": null,
+          "currency": "BRL",
+          "unitAmount": 29000
+        }
+      ],
+      "trialDays": 14,
+      "couponsAllowed": true,
+      "limits": {
+        "employees": 3,
+        "appointmentsPerMonth": 500,
+        "notificationsPerMonth": 2000
+      }
+    },
+    {
+      "code": "pro",
+      "product": {
+        "name": "Pro",
+        "productId": null
+      },
+      "prices": [
+        {
+          "cadence": "monthly",
+          "priceId": null,
+          "currency": "BRL",
+          "unitAmount": 7900
+        },
+        {
+          "cadence": "yearly",
+          "priceId": null,
+          "currency": "BRL",
+          "unitAmount": 79000
+        }
+      ],
+      "trialDays": 14,
+      "couponsAllowed": true,
+      "limits": {
+        "employees": 15,
+        "appointmentsPerMonth": 5000,
+        "notificationsPerMonth": 20000
+      }
+    }
+  ],
+  "webhooks": {
+    "listen": [
+      "checkout.session.completed",
+      "invoice.paid",
+      "invoice.payment_failed",
+      "customer.subscription.updated",
+      "payment_intent.succeeded",
+      "payment_intent.payment_failed"
+    ],
+    "idempotencyByEventId": true
+  },
+  "enforceLimits": {
+    "enabled": true,
+    "sources": ["stripe.subscription", "local.cache"],
+    "onBreach": "block_and_notify"
+  }
+}
