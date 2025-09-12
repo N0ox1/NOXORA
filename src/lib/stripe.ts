@@ -3,8 +3,8 @@ import { config } from './config';
 
 // Configuração do Stripe
 const stripeConfig = {
-  publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || 'pk_test_51RGTUvG45zgRrsHFYzSjoAiO7hOBy5r83YCx1ZyGenei0mBAdbP6jyC69NVpf55eVsXDTVNIk2zrFrE5UvucX6Ih00rG5XOTfc',
-  secretKey: process.env.STRIPE_SECRET_KEY || 'sk_test_51RGTUvG45zgRrsHFJSjT3mzwDhmJfAqEU9ULpWVvaKKRIZHLhz7WFJIiGtPHy3MAoCJi7WUiTdBtEpbIPTMZaewK00kGfuTABJ',
+  publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || 'pk_test_YOUR_STRIPE_PUBLISHABLE_KEY_HERE',
+  secretKey: process.env.STRIPE_SECRET_KEY || 'sk_test_YOUR_STRIPE_SECRET_KEY_HERE',
   webhookSecret: process.env.STRIPE_WEBHOOK_SECRET || 'whsec_your_webhook_secret_here',
   webhookEndpoint: '/api/v1/webhooks/stripe',
   idempotency: {
