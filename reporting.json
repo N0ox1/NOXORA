@@ -1,0 +1,20 @@
+{
+  "metrics": {
+    "bookings_today": { 
+      "type": "count", 
+      "source": "appointments", 
+      "filter": { 
+        "status_in": ["CONFIRMED","DONE"], 
+        "date": "today" 
+      } 
+    },
+    "no_show_rate_7d": { 
+      "type": "ratio", 
+      "window_days": 7 
+    },
+    "revenue_estimate_30d": { 
+      "type": "sum(price_cents)", 
+      "window_days": 30 
+    }
+  }
+}

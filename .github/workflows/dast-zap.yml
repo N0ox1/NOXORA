@@ -1,0 +1,13 @@
+name: DAST-ZAP
+on: [workflow_dispatch]
+
+jobs:
+  zap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: zaproxy/action-baseline@v0.13.0
+        with:
+          target: ${{ secrets.DAST_TARGET_URL }}
+          rules_file_name: '.zap/rules.tsv'
+          cmd_options: '-a'
+

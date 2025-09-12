@@ -1,0 +1,74 @@
+{
+  "templates": {
+    "appointment_reminder": {
+      "title": "Lembrete de Agendamento",
+      "body": "Olá {client_name}, você tem um agendamento amanhã às {time} com {employee_name} para {service_name}.",
+      "type": "SMS",
+      "priority": "high",
+      "delay_hours": 24
+    },
+    "appointment_confirmation": {
+      "title": "Confirmação de Agendamento",
+      "body": "Seu agendamento foi confirmado para {date} às {time} com {employee_name} para {service_name}.",
+      "type": "SMS",
+      "priority": "normal",
+      "delay_hours": 0
+    },
+    "appointment_cancellation": {
+      "title": "Cancelamento de Agendamento",
+      "body": "Seu agendamento para {date} às {time} foi cancelado. Entre em contato para reagendar.",
+      "type": "SMS",
+      "priority": "high",
+      "delay_hours": 0
+    },
+    "billing_reminder": {
+      "title": "Lembrete de Pagamento",
+      "body": "Olá {tenant_name}, sua fatura vence em {days_until_due} dias. Valor: R$ {amount}.",
+      "type": "EMAIL",
+      "priority": "high",
+      "delay_hours": 72
+    },
+    "billing_overdue": {
+      "title": "Pagamento em Atraso",
+      "body": "Sua fatura está em atraso há {days_overdue} dias. Valor: R$ {amount}. Entre em contato.",
+      "type": "EMAIL",
+      "priority": "critical",
+      "delay_hours": 0
+    },
+    "trial_ending": {
+      "title": "Trial Terminando",
+      "body": "Seu período de teste termina em {days_until_end} dias. Atualize seu plano para continuar.",
+      "type": "EMAIL",
+      "priority": "high",
+      "delay_hours": 48
+    }
+  },
+  "channels": {
+    "SMS": {
+      "provider": "mock",
+      "rate_limit": 10,
+      "retry_attempts": 3,
+      "retry_delay_minutes": 5
+    },
+    "EMAIL": {
+      "provider": "mock",
+      "rate_limit": 100,
+      "retry_attempts": 3,
+      "retry_delay_minutes": 15
+    },
+    "PUSH": {
+      "provider": "mock",
+      "rate_limit": 50,
+      "retry_attempts": 2,
+      "retry_delay_minutes": 10
+    }
+  },
+  "scheduling": {
+    "reminder_lead_time_hours": 24,
+    "confirmation_delay_minutes": 5,
+    "billing_reminder_days": 3,
+    "trial_warning_days": 2,
+    "max_retry_attempts": 3,
+    "retry_backoff_multiplier": 2
+  }
+}

@@ -1,0 +1,278 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  NODE_VERSION: '20.x'
+  PNPM_VERSION: '8.x'
+
+jobs:
+  # Job de qualidade de código
+  quality:
+    runs-on: ubuntu-latest
+    name: Code Quality
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Node.js ${{ env.NODE_VERSION }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v2
+      with:
+        version: ${{ env.PNPM_VERSION }}
+
+    - name: Install dependencies
+      run: pnpm install --frozen-lockfile
+
+    - name: Run linter
+      run: pnpm run lint
+
+    - name: Run type check
+      run: pnpm run type-check
+
+    - name: Check formatting
+      run: pnpm run format:check
+
+  # Job de banco de dados
+  database:
+    runs-on: ubuntu-latest
+    name: Database Setup
+    needs: quality
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: noxora_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Node.js ${{ env.NODE_VERSION }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v2
+      with:
+        version: ${{ env.PNPM_VERSION }}
+
+    - name: Install dependencies
+      run: pnpm install --frozen-lockfile
+
+    - name: Generate Prisma client
+      run: pnpm run db:prisma:generate
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/noxora_test
+
+    - name: Run Prisma migrations
+      run: pnpm run db:prisma:migrate
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/noxora_test
+
+    - name: Load seed data
+      run: pnpm run seed:prisma
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/noxora_test
+
+  # Job de build
+  build:
+    runs-on: ubuntu-latest
+    name: Build Application
+    needs: [quality, database]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Node.js ${{ env.NODE_VERSION }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v2
+      with:
+        version: ${{ env.PNPM_VERSION }}
+
+    - name: Install dependencies
+      run: pnpm install --frozen-lockfile
+
+    - name: Generate Prisma client
+      run: pnpm run db:prisma:generate
+
+    - name: Build application
+      run: pnpm run build
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-files
+        path: .next/
+        retention-days: 1
+
+  # Job de testes E2E
+  e2e:
+    runs-on: ubuntu-latest
+    name: End-to-End Tests
+    needs: [quality, database]
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: noxora_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Node.js ${{ env.NODE_VERSION }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v2
+      with:
+        version: ${{ env.PNPM_VERSION }}
+
+    - name: Install dependencies
+      run: pnpm install --frozen-lockfile
+
+    - name: Generate Prisma client
+      run: pnpm run db:prisma:generate
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/noxora_test
+
+    - name: Run Prisma migrations
+      run: pnpm run db:prisma:migrate
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/noxora_test
+
+    - name: Load seed data
+      run: pnpm run seed:prisma
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/noxora_test
+
+    - name: Install Playwright browsers
+      run: pnpm exec playwright install --with-deps
+
+    - name: Run Playwright tests
+      run: pnpm run test:e2e
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/noxora_test
+        REDIS_URL: redis://localhost:6379
+
+    - name: Upload Playwright report
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: playwright-report
+        path: playwright-report/
+        retention-days: 30
+
+  # Job de deploy para Vercel
+  deploy:
+    runs-on: ubuntu-latest
+    name: Deploy to Vercel
+    needs: [quality, database, build, e2e]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: production
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Node.js ${{ env.NODE_VERSION }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v2
+      with:
+        version: ${{ env.PNPM_VERSION }}
+
+    - name: Install dependencies
+      run: pnpm install --frozen-lockfile
+
+    - name: Generate Prisma client
+      run: pnpm run db:prisma:generate
+
+    - name: Deploy to Vercel
+      uses: amondnet/vercel-action@v25
+      with:
+        vercel-token: ${{ secrets.VERCEL_TOKEN }}
+        vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+        vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+        vercel-args: '--prod'
+
+    - name: Run post-deploy health check
+      run: |
+        echo "Waiting for deployment to be ready..."
+        sleep 30
+        
+        # Health check básico
+        curl -f ${{ steps.deploy.outputs.preview-url }}/api/health || exit 1
+        echo "✅ Health check passed"
+
+  # Job de notificação
+  notify:
+    runs-on: ubuntu-latest
+    name: Notify Results
+    needs: [quality, database, build, e2e, deploy]
+    if: always()
+
+    steps:
+    - name: Notify success
+      if: success()
+      run: |
+        echo "🎉 CI/CD Pipeline completed successfully!"
+        echo "✅ All jobs passed"
+        echo "🚀 Application deployed to production"
+
+    - name: Notify failure
+      if: failure()
+      run: |
+        echo "❌ CI/CD Pipeline failed!"
+        echo "🔍 Check the logs above for details"
+        exit 1

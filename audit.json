@@ -1,0 +1,13 @@
+{
+  "schemas": {
+    "AuditLog": { 
+      "id": "string",
+      "tenant_id": "string",
+      "actor_id": "string",
+      "action": "string",
+      "entity": "string",
+      "entity_id": "string",
+      "ts": "Date" 
+    }
+  }
+}

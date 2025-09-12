@@ -1,0 +1,244 @@
+generator client {
+  provider   = "prisma-client-js"
+  engineType = "library"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id           String         @id @default(cuid())
+  name         String
+  plan         TenantPlan     @default(STARTER)
+  status       TenantStatus   @default(ACTIVE)
+  domain       String?
+  settings     Json?
+  isActive     Boolean        @default(true)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  RefreshToken RefreshToken[]
+  appointments Appointment[]
+  auditLogs    AuditLog[]
+  barbershops  Barbershop[]
+  clients      Client[]
+  employees    Employee[]
+  services     Service[]
+
+  @@map("tenants")
+}
+
+model Barbershop {
+  id           String        @id @default(cuid())
+  tenantId     String
+  slug         String
+  name         String
+  description  String?
+  address      String?
+  phone        String?
+  email        String?
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  appointments Appointment[]
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employees    Employee[]
+  services     Service[]
+
+  @@unique([tenantId, slug])
+  @@index([tenantId])
+  @@map("barbershops")
+}
+
+model Employee {
+  id                  String         @id @default(cuid())
+  tenantId            String
+  barbershopId        String
+  name                String
+  role                EmployeeRole   @default(BARBER)
+  email               String?        @unique
+  phone               String?
+  active              Boolean        @default(true)
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  passwordHash        String?
+  failedLoginAttempts Int            @default(0) @map("failed_login_attempts")
+  lockedUntil         DateTime?      @map("locked_until") @db.Timestamptz(6)
+  passwordUpdatedAt   DateTime?      @map("password_updated_at") @db.Timestamptz(6)
+  RefreshToken        RefreshToken[]
+  appointments        Appointment[]
+  barbershop          Barbershop     @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  tenant              Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@index([tenantId, barbershopId])
+  @@map("employees")
+}
+
+model Service {
+  id           String        @id @default(cuid())
+  tenantId     String
+  barbershopId String
+  name         String
+  description  String?
+  durationMin  Int
+  priceCents   Int
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  appointments Appointment[]
+  barbershop   Barbershop    @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([tenantId, barbershopId])
+  @@map("services")
+}
+
+model Client {
+  id           String        @id @default(cuid())
+  tenantId     String
+  name         String
+  phone        String
+  email        String?
+  notes        String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  appointments Appointment[]
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("clients")
+}
+
+model Appointment {
+  id           String            @id @default(cuid())
+  tenantId     String
+  barbershopId String
+  employeeId   String
+  clientId     String
+  serviceId    String
+  startAt      DateTime
+  endAt        DateTime
+  status       AppointmentStatus @default(PENDING)
+  notes        String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  barbershops  Barbershop        @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  clients      Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  employees    Employee          @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  services     Service           @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  tenants      Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, barbershopId])
+  @@index([tenantId, barbershopId, startAt])
+  @@index([tenantId])
+  @@map("appointments")
+}
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  tenantId     String
+  actorId      String
+  action       String
+  entity       String
+  entityId     String
+  ts           DateTime @default(now())
+  actorType    String?
+  actorName    String?
+  actorEmail   String?
+  ipAddress    String?
+  userAgent    String?
+  sessionId    String?
+  requestId    String?
+  changes      Json?
+  metadata     Json?
+  severity     String?
+  status       String?
+  errorMessage String?
+  stackTrace   String?
+  prevHash     String? @db.Text
+  hash         String? @db.Text
+  hmac         String? @db.Text
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([actorId])
+  @@index([entity])
+  @@index([entityId])
+  @@index([action])
+  @@index([severity])
+  @@index([ts])
+  @@map("audit_logs")
+}
+
+/// === Idempotency (map para tabela existente) ===
+model IdempotencyRequest {
+  id           String   @id
+  tenantId     String   @map("tenant_id")
+  idemKey      String   @map("idem_key")
+  reqHash      String   @map("req_hash")
+  statusCode   Int      @map("status_code")
+  responseJson Json     @map("response_json")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, idemKey], map: "idx_idem_unique")
+  @@index([createdAt], map: "idx_idem_created_at")
+  @@map("idempotency_requests")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String    @map("tenant_id")
+  userId    String    @map("user_id")
+  tokenHash String    @map("token_hash")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, tokenHash], map: "password_reset_tokens_tenant_token_hash_key")
+  @@map("password_reset_tokens")
+}
+
+model RefreshToken {
+  tenantId   String
+  employeeId String
+  jti        String    @id
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  employees  Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  tenants    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, employeeId])
+}
+
+enum TenantPlan {
+  STARTER
+  PRO
+  SCALE
+}
+
+enum TenantStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  TRIALING
+}
+
+enum EmployeeRole {
+  OWNER
+  MANAGER
+  BARBER
+  ASSISTANT
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  CANCELED
+  NO_SHOW
+  DONE
+}

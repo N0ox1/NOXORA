@@ -1,0 +1,59 @@
+{
+  "tenants": [
+    { 
+      "id": "tnt_1",
+      "name": "Barber Labs",
+      "plan": "PRO",
+      "status": "TRIALING" 
+    }
+  ],
+  "barbershops": [
+    { 
+      "id": "shop_1",
+      "tenant_id": "tnt_1",
+      "slug": "barber-labs-centro",
+      "name": "Barber Labs Centro",
+      "is_active": true 
+    }
+  ],
+  "employees": [
+    { 
+      "id": "emp_1",
+      "tenant_id": "tnt_1",
+      "barbershop_id": "shop_1",
+      "name": "Rafa",
+      "role": "BARBER",
+      "active": true 
+    }
+  ],
+  "services": [
+    { 
+      "id": "srv_1",
+      "tenant_id": "tnt_1",
+      "barbershop_id": "shop_1",
+      "name": "Corte Masculino",
+      "duration_min": 30,
+      "price_cents": 4500,
+      "is_active": true 
+    }
+  ],
+  "clients": [
+    { 
+      "id": "cli_1",
+      "tenant_id": "tnt_1",
+      "name": "João Silva",
+      "phone": "+55 11 90000-0000" 
+    }
+  ],
+  "appointments": [
+    { 
+      "id": "app_1",
+      "tenant_id": "tnt_1",
+      "barbershop_id": "shop_1",
+      "employee_id": "emp_1",
+      "client_id": "cli_1",
+      "service_id": "srv_1",
+      "status": "CONFIRMED" 
+    }
+  ]
+}
