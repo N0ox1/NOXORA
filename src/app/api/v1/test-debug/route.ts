@@ -40,7 +40,7 @@ export const GET = async (req: NextRequest, { params }: { params: any }) => {
         console.error('❌ Erro no debug:', error);
         return NextResponse.json({
             success: false,
-            error: error.message,
+            error: error instanceof Error ? error.message : 'Unknown error',
             details: error
         }, { status: 500 });
     }

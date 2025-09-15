@@ -9,15 +9,6 @@ const createPrismaClient = () => {
             },
         },
         log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
-        // Configurações de pool otimizadas
-        __internal: {
-            engine: {
-                // Configurações específicas do engine
-                connectionLimit: parseInt(process.env.DATABASE_CONNECTION_LIMIT || '5'),
-                poolTimeout: parseInt(process.env.DATABASE_POOL_TIMEOUT || '10'),
-                idleTimeout: parseInt(process.env.DATABASE_IDLE_TIMEOUT || '300'),
-            },
-        },
     });
 };
 
@@ -220,4 +211,5 @@ export async function closeDatabase(): Promise<void> {
         await prisma.$disconnect();
     }
 }
+
 

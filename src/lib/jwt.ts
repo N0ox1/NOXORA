@@ -29,10 +29,10 @@ export async function signRefresh(claims: Omit<RefreshClaims, 'jti' | 'iat' | 'e
   await prisma.refreshToken.create({
     data: {
       tenantId: (claims as any).tenantId,
-      userId: (claims as any).sub,
+      employeeId: (claims as any).sub,
       jti,
-      sessionId: (claims as any).sessionId,
-      tokenHash: hashToken(token),
+      // sessionId: (claims as any).sessionId,
+      // tokenHash: hashToken(token),
       expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30)
     }
   });
@@ -57,17 +57,17 @@ export async function rotateRefresh(oldToken: string) {
   const rec = await prisma.refreshToken.findFirst({
     where: {
       tenantId: payload.tenantId,
-      userId: payload.sub,
+      employeeId: payload.sub,
       jti: payload.jti,
-      tokenHash,
-      isRevoked: false
+      // tokenHash,
+      revokedAt: null
     }
   });
   if (!rec) {
-    await prisma.refreshToken.updateMany({ where: { tenantId: payload.tenantId, userId: payload.sub, sessionId: payload.sessionId, isRevoked: false }, data: { isRevoked: true } });
+    await prisma.refreshToken.updateMany({ where: { tenantId: payload.tenantId, employeeId: payload.sub, jti: payload.jti }, data: { revokedAt: new Date() } });
     throw new Error('refresh_reuse_detected');
   }
-  await prisma.refreshToken.update({ where: { id: rec.id }, data: { isRevoked: true } });
+  await prisma.refreshToken.update({ where: { jti: rec.jti }, data: { revokedAt: new Date() } });
   const next = await signRefresh({ sub: payload.sub, tenantId: payload.tenantId, sessionId: payload.sessionId });
   return next;
 }

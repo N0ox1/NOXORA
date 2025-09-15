@@ -47,7 +47,7 @@ function calculateHash(prevHash: string, payload: any): string {
         payload.metadata ? JSON.stringify(payload.metadata, null, 2) : ''
     ].join('|');
 
-    return createHmac('sha256', HMAC_SECRET).update(data).digest('hex');
+    return createHmac('sha256', HMAC_SECRET || 'default-secret').update(data).digest('hex');
 }
 
 // Create audit log entry
@@ -75,10 +75,18 @@ export async function createAuditLog(
 
         await prisma.auditLog.create({
             data: {
-                ...payload,
+                tenantId: payload.tenantId,
+                actorId: payload.actorId || 'system',
+                action: payload.action,
+                entity: payload.entity,
+                entityId: payload.entityId,
+                changes: payload.changes,
+                metadata: payload.metadata,
+                ipAddress: payload.ipAddress,
+                userAgent: payload.userAgent,
                 prevHash,
                 hash,
-                hmac: createHmac('sha256', HMAC_SECRET).update(hash).digest('hex')
+                hmac: createHmac('sha256', HMAC_SECRET || 'default-secret').update(hash).digest('hex')
             }
         });
     } catch (error) {

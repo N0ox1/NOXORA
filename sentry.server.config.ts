@@ -4,7 +4,6 @@ Sentry.init({
     dsn: process.env.SENTRY_DSN,
     enabled: !!process.env.SENTRY_DSN,
     environment: process.env.NODE_ENV,
-    instrumenter: 'otel',
     tracesSampleRate: 0, // OTel cuida dos traces
     profilesSampleRate: 0,
     integrations(defaults) {

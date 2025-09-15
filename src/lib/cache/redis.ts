@@ -1,4 +1,5 @@
 import { Redis } from 'ioredis';
+import { NextResponse } from 'next/server';
 import { memoryCache } from './memory';
 
 // Configuração do Redis
@@ -16,20 +17,16 @@ if (process.env.REDIS_HOST || process.env.REDIS_URL) {
             host: redisHost,
             port: redisPort,
             password: process.env.REDIS_PASSWORD,
-            retryDelayOnFailover: 100,
             maxRetriesPerRequest: 3,
             lazyConnect: true,
             keepAlive: 30000,
             connectTimeout: 10000,
             commandTimeout: 5000,
-            // Configurar para não tentar reconectar automaticamente
-            retryDelayOnClusterDown: 300,
-            enableOfflineQueue: false,
         });
 
         // Adicionar listener de erro para evitar spam
         redis.on('error', (err) => {
-            if (err.code === 'ECONNREFUSED') {
+            if ((err as any).code === 'ECONNREFUSED') {
                 console.warn('Redis connection refused, falling back to memory cache');
                 useMemoryCache = true;
                 redis = null;
@@ -335,35 +332,24 @@ export class CacheService {
 export const cacheService = new CacheService();
 
 // Helper para adicionar headers de cache
-export function addCacheHeaders(response: Response, source: 'db' | 'redis' = 'db'): Response {
-    const headers = new Headers(response.headers);
+export function addCacheHeaders(response: NextResponse, source: 'db' | 'redis' = 'db'): NextResponse {
+    response.headers.set('Cache-Control', CACHE_HEADERS.cacheControl);
+    response.headers.set(CACHE_HEADERS.diagnostics.cacheSource, source);
+    response.headers.set(CACHE_HEADERS.diagnostics.vercelCache, source === 'redis' ? 'HIT' : 'MISS');
 
-    headers.set('Cache-Control', CACHE_HEADERS.cacheControl);
-    headers.set(CACHE_HEADERS.diagnostics.cacheSource, source);
-    headers.set(CACHE_HEADERS.diagnostics.vercelCache, source === 'redis' ? 'HIT' : 'MISS');
-
-    return new Response(response.body, {
-        status: response.status,
-        statusText: response.statusText,
-        headers,
-    });
+    return response;
 }
 
 // Helper para criar resposta com cache
 export function createCachedResponse<T>(
     data: T,
-    source: 'db' | 'redis' | 'memory' = 'db',
+    source: 'db' | 'redis' = 'db',
     status: number = 200
-): Response {
-    const response = new Response(JSON.stringify(data), {
-        status,
-        headers: {
-            'Content-Type': 'application/json',
-        },
-    });
+): NextResponse {
+    const response = NextResponse.json(data, { status });
 
-    // Se estiver usando cache em memória, marcar como 'memory'
-    const actualSource = useMemoryCache && source === 'redis' ? 'memory' : source;
+    // Se estiver usando cache em memória, marcar como 'db'
+    const actualSource = useMemoryCache && source === 'redis' ? 'db' : source;
 
     return addCacheHeaders(response, actualSource);
 }

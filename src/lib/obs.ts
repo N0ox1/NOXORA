@@ -11,7 +11,7 @@ export function bindRequest(req: Request) {
 export async function tagError(e: any, meta: { tenantId?: string; requestId?: string }) {
     try {
         const Sentry = await import('@sentry/nextjs');
-        if (Sentry?.getCurrentHub?.().getClient()) {
+        if (Sentry && (Sentry as any).getCurrentHub && (Sentry as any).getCurrentHub()?.getClient()) {
             Sentry.withScope((scope: any) => {
                 if (meta.tenantId) scope.setTag('tenantId', meta.tenantId);
                 if (meta.requestId) scope.setTag('requestId', meta.requestId);

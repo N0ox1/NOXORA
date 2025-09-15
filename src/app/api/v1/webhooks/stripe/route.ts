@@ -6,13 +6,13 @@ import { validate } from '@/lib/validate';
 import { stripeWebhook } from '@/lib/validation/schemas';
 
 export const { POST } = api({
-    POST: async (req: NextRequest) => {
+    POST: async (req: NextRequest): Promise<NextResponse> => {
         // Validate Stripe signature
         const signature = req.headers.get('stripe-signature');
         if (!signature) {
-            return new Response(
-                JSON.stringify({ code: 'bad_request', msg: 'missing_stripe_signature' }),
-                { status: 400, headers: { 'content-type': 'application/json' } }
+            return NextResponse.json(
+                { code: 'bad_request', msg: 'missing_stripe_signature' },
+                { status: 400 }
             );
         }
 
@@ -27,14 +27,11 @@ export const { POST } = api({
 
         // TODO: Implement actual webhook processing
         // This is a placeholder response
-        return new Response(
-            JSON.stringify({
-                received: true,
-                eventId: data.id,
-                eventType: data.type,
-                processedAt: new Date().toISOString()
-            }),
-            { status: 200, headers: { 'content-type': 'application/json' } }
-        );
+        return NextResponse.json({
+            received: true,
+            eventId: data.id,
+            eventType: data.type,
+            processedAt: new Date().toISOString()
+        }, { status: 200 });
     }
 });

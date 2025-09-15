@@ -29,9 +29,10 @@ export const GET = async (req: NextRequest, { params }: { params: any }) => {
 
     } catch (error) {
         console.error('❌ Erro no debug:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         return NextResponse.json({
             success: false,
-            error: error.message,
+            error: errorMessage,
             details: error
         }, { status: 500 });
     }

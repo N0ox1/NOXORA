@@ -12,16 +12,14 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const record = await prisma.outbox.findUnique({
+    const record = await prisma.auditLog.findUnique({
       where: { id: notificationId },
       select: {
         id: true,
         status: true,
-        attempts: true,
-        maxAttempts: true,
-        error: true,
-        createdAt: true,
-        updatedAt: true
+        metadata: true,
+        errorMessage: true,
+        ts: true
       }
     });
 
@@ -32,14 +30,15 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    const metadata = record.metadata as any || {};
     return NextResponse.json({
       id: record.id,
-      status: record.status,
-      attempts: record.attempts,
-      maxAttempts: record.maxAttempts,
-      error: record.error,
-      createdAt: record.createdAt,
-      updatedAt: record.updatedAt
+      status: record.status || metadata.status || 'unknown',
+      attempts: metadata.attempts || 0,
+      maxAttempts: metadata.maxAttempts || 5,
+      error: record.errorMessage,
+      createdAt: record.ts,
+      updatedAt: record.ts
     });
 
   } catch (error) {

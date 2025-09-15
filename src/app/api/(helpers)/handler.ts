@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
-export type RouteHandler = (req: NextRequest) => Promise<NextResponse>;
+export type RouteHandler = (req: NextRequest, context?: { params: any }) => Promise<NextResponse>;
 
 /**
  * Helper mínimo para padronizar export de handlers por método.

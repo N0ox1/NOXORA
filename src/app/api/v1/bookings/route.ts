@@ -10,7 +10,9 @@ const BookingCreateSchema = strict({
     clientId: cuid(),
     serviceId: cuid(),
     employeeId: cuid(),
+    barbershopId: cuid(),
     startAt: zISODate(),
+    endAt: zISODate(),
     notes: z.string().optional().transform((s) => s?.trim())
 });
 

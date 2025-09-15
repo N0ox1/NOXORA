@@ -173,7 +173,7 @@ async function runTests() {
         });
 
         console.log(`📊 Found ${auditLogs.length} audit log entries:`);
-        auditLogs.forEach((log, index) => {
+        auditLogs.forEach((log: any, index: number) => {
             console.log(`   ${index + 1}. ${log.action} on ${log.entity} (${log.entityId})`);
             console.log(`      Hash: ${log.hash?.substring(0, 16) || 'N/A'}...`);
             console.log(`      Time: ${log.ts}`);

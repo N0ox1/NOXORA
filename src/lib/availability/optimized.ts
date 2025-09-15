@@ -180,7 +180,7 @@ export class OptimizedAvailabilityService {
         FROM employees_hours
         WHERE employee_id = ${employeeId}
         AND weekday = ${dayOfWeek}
-      ` as Array<{
+      ` as unknown as Array<{
                 start_time: string;
                 end_time: string;
                 break_min: number;

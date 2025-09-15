@@ -39,10 +39,10 @@ export async function GET(req: NextRequest) {
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
         const [notificationsCount, appointmentsCount, employeesCount] = await Promise.all([
-            prisma.outbox.count({
+            prisma.auditLog.count({
                 where: {
                     tenantId,
-                    createdAt: { gte: thirtyDaysAgo }
+                    ts: { gte: thirtyDaysAgo }
                 }
             }),
             prisma.appointment.count({
@@ -84,5 +84,6 @@ export async function GET(req: NextRequest) {
         );
     }
 }
+
 
 

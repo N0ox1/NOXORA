@@ -1,7 +1,7 @@
 // Tipos para o sistema de relatórios baseados no reporting.json
 
 // ===== TIPOS DE MÉTRICAS =====
-export type MetricType = 'count' | 'ratio' | 'sum' | 'average' | 'min' | 'max' | 'trend';
+export type MetricType = 'count' | 'ratio' | 'sum' | 'average' | 'min' | 'max' | 'trend' | 'percentage';
 
 // ===== FILTROS DE MÉTRICAS =====
 export interface MetricFilter {
@@ -260,7 +260,7 @@ export const formatMetricValue = (value: number, type: MetricType, unit?: string
     case 'count':
       return value.toLocaleString('pt-BR');
     case 'ratio':
-    case 'percentage' as any: // @ts-ignore aceitar alias
+    case 'percentage':
       return `${(value * 100).toFixed(2)}%`;
     case 'sum':
       if (unit === 'price_cents') {

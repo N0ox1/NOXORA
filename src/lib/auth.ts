@@ -18,7 +18,7 @@ export async function signRefresh(payload:{ sub:string; tid:string; role:string;
   const exp=new Date(Date.now()+REFRESH_TTL*1000);
   const token=await new SignJWT({ ...payload, typ:'refresh', jti } as JWTPayload)
     .setProtectedHeader({ alg:'HS256' }).setIssuedAt().setExpirationTime(REFRESH_TTL).sign(secret());
-  await prisma.refreshToken.create({ data:{ jti, tenantId: payload.tid, userId: payload.sub, sessionId: (payload as any).sid || '', tokenHash: '', isRevoked: false, expiresAt: exp } });
+  await prisma.refreshToken.create({ data:{ jti, tenantId: payload.tid, employeeId: payload.sub, expiresAt: exp } });
   return { token, jti, exp };
 }
 
@@ -28,14 +28,14 @@ export async function rotateRefresh(oldToken:string){
   const { jti, sub, tid, role, tdom } = (await verifyJWT(oldToken)) as any;
   if(!jti||!sub||!tid) throw new Error('invalid_refresh');
   const row=await prisma.refreshToken.findFirst({ where:{ jti, tenantId: tid } });
-  if(!row||row.isRevoked||row.expiresAt<new Date()) throw new Error('refresh_revoked');
-  await prisma.refreshToken.updateMany({ where:{ jti, tenantId: tid }, data:{ isRevoked:true } });
+  if(!row||row.revokedAt||row.expiresAt<new Date()) throw new Error('refresh_revoked');
+  await prisma.refreshToken.updateMany({ where:{ jti, tenantId: tid }, data:{ revokedAt: new Date() } });
   const access=await signAccess({ sub, tid, role, tdom });
   const refresh=await signRefresh({ sub, tid, role, tdom });
   return { access, refresh };
 }
 
 export async function revokeRefresh(token:string){
-  try{ const { jti, tid }=await verifyJWT<any>(token); if(!jti||!tid) return; await prisma.refreshToken.updateMany({ where:{ jti, tenantId: tid }, data:{ isRevoked:true } }).catch(()=>{}); }
+  try{ const { jti, tid }=await verifyJWT<any>(token); if(!jti||!tid) return; await prisma.refreshToken.updateMany({ where:{ jti, tenantId: tid }, data:{ revokedAt: new Date() } }).catch(()=>{}); }
   catch(e){ if(!(e instanceof errors.JOSEError)) throw e; }
 }

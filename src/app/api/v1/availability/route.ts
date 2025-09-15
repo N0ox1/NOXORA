@@ -17,18 +17,15 @@ export const { GET } = api({
 
         // TODO: Implement actual availability check with Prisma
         // This is a placeholder response
-        return new Response(
-            JSON.stringify({
-                date: queryResult.data.date,
-                employeeId: queryResult.data.employeeId,
-                serviceId: queryResult.data.serviceId,
-                availableSlots: [
-                    { time: '09:00', available: true },
-                    { time: '10:00', available: true },
-                    { time: '11:00', available: false }
-                ]
-            }),
-            { status: 200, headers: { 'content-type': 'application/json' } }
-        );
+        return NextResponse.json({
+            date: queryResult.data.date,
+            employeeId: queryResult.data.employeeId,
+            serviceId: queryResult.data.serviceId,
+            availableSlots: [
+                { time: '09:00', available: true },
+                { time: '10:00', available: true },
+                { time: '11:00', available: false }
+            ]
+        }, { status: 200 });
     }
 });

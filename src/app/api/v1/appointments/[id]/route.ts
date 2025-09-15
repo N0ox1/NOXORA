@@ -7,7 +7,8 @@ import { validateHeaders, validateParams } from '@/lib/validation/middleware';
 import { idParam, appointmentUpdate } from '@/lib/validation/schemas';
 
 export const { GET, PUT, DELETE } = api({
-  GET: async (req: NextRequest, { params }: { params: any }) => {
+  GET: async (req: NextRequest, context?: { params: any }) => {
+    const { params } = context || { params: {} };
     // Validate headers
     const headerError = validateHeaders(req);
     if (headerError) return headerError;
@@ -30,7 +31,8 @@ export const { GET, PUT, DELETE } = api({
     }, { status: 200 });
   },
 
-  PUT: async (req: NextRequest, { params }: { params: any }) => {
+  PUT: async (req: NextRequest, context?: { params: any }) => {
+    const { params } = context || { params: {} };
     // Validate headers
     const headerError = validateHeaders(req);
     if (headerError) return headerError;
@@ -51,7 +53,8 @@ export const { GET, PUT, DELETE } = api({
     }, { status: 200 });
   },
 
-  DELETE: async (req: NextRequest, { params }: { params: any }) => {
+  DELETE: async (req: NextRequest, context?: { params: any }) => {
+    const { params } = context || { params: {} };
     // Validate headers
     const headerError = validateHeaders(req);
     if (headerError) return headerError;

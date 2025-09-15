@@ -62,20 +62,22 @@ export async function POST(req: NextRequest) {
         // Simular falha se forceFail for true ou email termina com @dlq.dev
         const shouldFail = forceFail || to.endsWith('@dlq.dev');
 
-        const rec = await prisma.outbox.upsert({
-            where: {
-                tenantId_messageKey: { tenantId, messageKey: idem }
-            },
-            update: {},
-            create: {
+        const rec = await prisma.auditLog.create({
+            data: {
                 tenantId,
-                template,
-                to,
-                payload: data ?? {},
-                messageKey: idem,
-                status: shouldFail ? 'FAILED' : 'PENDING',
-                attempts: 0,
-                maxAttempts: 5
+                actorId: 'system',
+                action: 'notification_test',
+                entity: 'notification',
+                entityId: idem,
+                metadata: {
+                    template,
+                    to,
+                    payload: data ?? {},
+                    messageKey: idem,
+                    status: shouldFail ? 'FAILED' : 'PENDING',
+                    attempts: 0,
+                    maxAttempts: 5
+                }
             }
         });
 
@@ -83,7 +85,7 @@ export async function POST(req: NextRequest) {
             {
                 id: rec.id,
                 status: rec.status,
-                messageKey: rec.messageKey
+                messageKey: rec.entityId
             },
             { status: 201 }
         );

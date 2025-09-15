@@ -10,3 +10,4 @@ export async function GET(req: NextRequest) {
     throw new Error(`Test error for observability validation - tenantId: ${tenantId}, requestId: ${requestId}`);
 }
 
+

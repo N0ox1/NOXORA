@@ -21,7 +21,7 @@ export const POST = async (req: NextRequest) => {
         console.error('❌ Erro na validação:', error);
         return NextResponse.json({
             success: false,
-            error: error.message,
+            error: error instanceof Error ? error.message : 'Unknown error',
             details: error
         }, { status: 500 });
     }
