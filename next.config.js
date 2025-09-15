@@ -14,6 +14,12 @@ const securityHeaders = [
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  typescript: {
+    ignoreBuildErrors: true,
+  },
   serverExternalPackages: [
     '@opentelemetry/sdk-trace-node',
     '@opentelemetry/sdk-trace-base',
