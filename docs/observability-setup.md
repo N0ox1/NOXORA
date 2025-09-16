@@ -70,3 +70,4 @@ Configure these alerts in your monitoring system:
 - **Pool esperando**: `db.pool_wait_count > 0`
 
 
+

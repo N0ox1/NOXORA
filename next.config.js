@@ -20,6 +20,16 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'otzkbzkko9zzxvfo.public.blob.vercel-storage.com',
+        port: '',
+        pathname: '/**',
+      },
+    ],
+  },
   serverExternalPackages: [
     '@opentelemetry/sdk-trace-node',
     '@opentelemetry/sdk-trace-base',

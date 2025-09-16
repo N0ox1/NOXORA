@@ -271,3 +271,4 @@ AFTER INSERT OR UPDATE OR DELETE ON appointments
 FOR EACH ROW EXECUTE FUNCTION t_appointments_audit();
 
 
+
