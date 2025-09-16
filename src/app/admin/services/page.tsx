@@ -48,8 +48,8 @@ export default function ServicesPage(){
       <CardContent className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
           <Input placeholder="Nome" value={name} onChange={e=>setName(e.target.value)} />
-          <Input type="number" placeholder="Duração (min)" value={durationMin} onChange={e=>setDurationMin(Number(e.target.value))} />
-          <Input type="number" placeholder="Preço (centavos)" value={priceCents} onChange={e=>setPriceCents(Number(e.target.value))} />
+          <Input type="number" placeholder="Duração (min)" value={durationMin || ''} onChange={e=>setDurationMin(Number(e.target.value) || 0)} />
+          <Input type="number" placeholder="Preço (centavos)" value={priceCents || ''} onChange={e=>setPriceCents(Number(e.target.value) || 0)} />
           <Button onClick={create} disabled={loading}>{loading?'Criando...':'Criar'}</Button>
         </div>
         <div className="divide-y border rounded">

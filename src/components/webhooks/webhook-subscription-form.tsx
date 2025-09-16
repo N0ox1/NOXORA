@@ -196,7 +196,7 @@ export function WebhookSubscriptionForm({ tenantId, onSubmit }: WebhookSubscript
                   min="1"
                   max="10"
                   value={formData.retry_config.max_attempts}
-                  onChange={(e) => handleInputChange('retry_config.max_attempts', parseInt(e.target.value))}
+                  onChange={(e) => handleInputChange('retry_config.max_attempts', parseInt(e.target.value) || 0)}
                 />
               </div>
               
@@ -209,7 +209,7 @@ export function WebhookSubscriptionForm({ tenantId, onSubmit }: WebhookSubscript
                   max="60000"
                   step="1000"
                   value={formData.retry_config.initial_delay_ms}
-                  onChange={(e) => handleInputChange('retry_config.initial_delay_ms', parseInt(e.target.value))}
+                  onChange={(e) => handleInputChange('retry_config.initial_delay_ms', parseInt(e.target.value) || 0)}
                 />
               </div>
               
@@ -222,7 +222,7 @@ export function WebhookSubscriptionForm({ tenantId, onSubmit }: WebhookSubscript
                   max="300000"
                   step="1000"
                   value={formData.retry_config.max_delay_ms}
-                  onChange={(e) => handleInputChange('retry_config.max_delay_ms', parseInt(e.target.value))}
+                  onChange={(e) => handleInputChange('retry_config.max_delay_ms', parseInt(e.target.value) || 0)}
                 />
               </div>
               
@@ -235,7 +235,7 @@ export function WebhookSubscriptionForm({ tenantId, onSubmit }: WebhookSubscript
                   max="5"
                   step="0.1"
                   value={formData.retry_config.backoff_multiplier}
-                  onChange={(e) => handleInputChange('retry_config.backoff_multiplier', parseFloat(e.target.value))}
+                  onChange={(e) => handleInputChange('retry_config.backoff_multiplier', parseFloat(e.target.value) || 0)}
                 />
               </div>
             </div>
