@@ -1,41 +1,64 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-// Removido apiFetch - usando fetch direto
 import { useTenant } from '@/components/tenant/use-tenant';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { toast, Toaster } from 'react-hot-toast';
-import { startOfDay, addDays, toISO, fmtHM } from '@/lib/datetime';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
-// === APPEND: imports para modal ===
-import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
+import { toast, Toaster } from 'react-hot-toast';
+import { addDays, format, startOfDay } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
-interface Appt { id: string; startAt: string; endAt: string; status: 'PENDING' | 'CONFIRMED' | 'CANCELED'; serviceId: string; employeeId: string; clientName?: string; clientPhone?: string; barbershopId: string }
-interface Employee { id: string; name: string }
+interface Service {
+  id: string;
+  name: string;
+  durationMin: number;
+  priceCents: number;
+}
 
-export default function AgendaPage() {
+interface Employee {
+  id: string;
+  name: string;
+}
+
+interface TimeSlot {
+  time: string;
+  available: boolean;
+}
+
+type Step = 'service' | 'barber' | 'datetime' | 'summary';
+
+export default function BookingPage() {
   const router = useRouter();
   const { tenantId } = useTenant('cmffwm0j20000uaoo2c4ugtvx');
-  const [start, setStart] = useState<string>(() => new Date().toISOString().substring(0, 10));
-  const [days, setDays] = useState<number>(7);
-  const [items, setItems] = useState<Appt[]>([]);
-  const [loading, setLoading] = useState(false);
+  
+  // Estados do fluxo
+  const [currentStep, setCurrentStep] = useState<Step>('service');
+  const [selectedService, setSelectedService] = useState<Service | null>(null);
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string>('');
+  const [selectedTime, setSelectedTime] = useState<string>('');
+  const [clientName, setClientName] = useState<string>('');
+  const [clientPhone, setClientPhone] = useState<string>('');
+  
+  // Dados
+  const [services, setServices] = useState<Service[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [employeeId, setEmployeeId] = useState<string>('');
-  // estado do modal e formulário
-  const [open, setOpen] = useState(false);
-  const [svc, setSvc] = useState('');
-  const [emp, setEmp] = useState('');
-  const [cliName, setCliName] = useState('');
-  const [cliPhone, setCliPhone] = useState('');
-  const [svcs, setSvcs] = useState<{ id: string; name: string; durationMin: number }[]>([]);
-  // === APPEND: estado de filtros de listagem ===
-  const [filterEmp, setFilterEmp] = useState<string>('all');
-  const [filterSvc, setFilterSvc] = useState<string>('all');
+  const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  // Carregar dados iniciais
+  useEffect(() => {
+    loadServices();
+    loadEmployees();
+  }, []);
+
+  // Carregar horários quando data for selecionada
+  useEffect(() => {
+    if (selectedDate && selectedEmployee) {
+      loadTimeSlots();
+    }
+  }, [selectedDate, selectedEmployee]);
 
   async function loadServices() {
     try {
@@ -44,66 +67,13 @@ export default function AgendaPage() {
       });
       if (response.ok) {
         const data = await response.json();
-        setSvcs(data);
+        setServices(data);
       }
     } catch (error) {
       console.error('Erro ao carregar serviços:', error);
     }
   }
-  useEffect(() => { loadServices(); }, [tenantId]);
 
-  async function createAppt() {
-    if (!svc || !emp || !cliName || !cliPhone) { toast.error('Preencha todos os campos'); return; }
-    try {
-      const sel = svcs.find(s => s.id === svc);
-      const start = new Date(range.s);
-      start.setUTCHours(9, 0, 0, 0); // padrão 09:00
-      const end = new Date(start);
-      end.setUTCMinutes((sel?.durationMin ?? 60));
-      const response = await fetch('/api/v1/appointments', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-tenant-id': tenantId
-        },
-        body: JSON.stringify({
-          barbershopId: 'cmffwm0ks0002uaoot2x03802', // ID real da barbershop
-          serviceId: svc,
-          employeeId: emp,
-          clientId: 'client-' + Date.now(), // Gerar ID temporário
-          scheduledAt: start.toISOString(),
-          notes: `Cliente: ${cliName}, Telefone: ${cliPhone}`
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Erro ao criar agendamento');
-      }
-      toast.success('Agendamento criado');
-      setOpen(false); setSvc(''); setEmp(''); setCliName(''); setCliPhone('');
-      await load();
-    } catch (e: any) { toast.error(e.message || 'Falha ao criar'); }
-  }
-
-  const range = useMemo(() => { const s = startOfDay(new Date(start + 'T00:00:00.000Z')); const e = addDays(s, days); return { s, e }; }, [start, days]);
-
-  async function load() {
-    try {
-      const qs = new URLSearchParams({ start: toISO(range.s), end: toISO(range.e) });
-      if (filterEmp && filterEmp !== 'all') qs.set('employeeId', filterEmp);
-      if (filterSvc && filterSvc !== 'all') qs.set('serviceId', filterSvc);
-      const response = await fetch(`/api/v1/appointments/list?${qs.toString()}`, {
-        headers: { 'x-tenant-id': tenantId }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setItems(data.items || []);
-      } else {
-        throw new Error('Erro ao carregar agendamentos');
-      }
-    } catch (e: any) { toast.error(e.message || 'Falha ao carregar'); }
-  }
   async function loadEmployees() {
     try {
       const response = await fetch('/api/v1/employees', {
@@ -111,190 +81,400 @@ export default function AgendaPage() {
       });
       if (response.ok) {
         const data = await response.json();
-        setEmployees(data as Employee[]);
+        setEmployees(data);
       }
     } catch (error) {
       console.error('Erro ao carregar funcionários:', error);
     }
   }
 
-  useEffect(() => { loadEmployees(); }, [tenantId]);
-  useEffect(() => { load(); }, [tenantId, range, filterEmp, filterSvc]);
+  async function loadTimeSlots() {
+    // Simular carregamento de horários disponíveis
+    const slots = [];
+    for (let hour = 8; hour <= 18; hour++) {
+      for (let minute = 0; minute < 60; minute += 30) {
+        const time = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+        slots.push({
+          time,
+          available: Math.random() > 0.3 // 70% de chance de estar disponível
+        });
+      }
+    }
+    setTimeSlots(slots);
+  }
 
-  const grouped = useMemo(() => { const m: Record<string, Appt[]> = {}; for (const a of items) { const k = a.startAt.substring(0, 10); (m[k] ||= []).push(a); } return m; }, [items]);
+  function formatPrice(cents: number): string {
+    return `R$ ${(cents / 100).toFixed(0)}`;
+  }
 
-  async function cancel(id: string) {
+  function formatDuration(minutes: number): string {
+    return `${minutes} min`;
+  }
+
+  function getStepNumber(step: Step): number {
+    const steps = ['service', 'barber', 'datetime', 'summary'];
+    return steps.indexOf(step) + 1;
+  }
+
+  function canProceed(): boolean {
+    switch (currentStep) {
+      case 'service':
+        return selectedService !== null;
+      case 'barber':
+        return selectedEmployee !== null;
+      case 'datetime':
+        return selectedDate !== '' && selectedTime !== '';
+      case 'summary':
+        return clientName !== '' && clientPhone !== '';
+      default:
+        return false;
+    }
+  }
+
+  function handleNext() {
+    if (!canProceed()) return;
+
+    switch (currentStep) {
+      case 'service':
+        setCurrentStep('barber');
+        break;
+      case 'barber':
+        setCurrentStep('datetime');
+        break;
+      case 'datetime':
+        setCurrentStep('summary');
+        break;
+      case 'summary':
+        handleSubmit();
+        break;
+    }
+  }
+
+  function handleBack() {
+    switch (currentStep) {
+      case 'service':
+        router.push('/dashboard');
+        break;
+      case 'barber':
+        setCurrentStep('service');
+        break;
+      case 'datetime':
+        setCurrentStep('barber');
+        break;
+      case 'summary':
+        setCurrentStep('datetime');
+        break;
+    }
+  }
+
+  async function handleSubmit() {
+    if (!selectedService || !selectedEmployee || !selectedDate || !selectedTime || !clientName || !clientPhone) {
+      toast.error('Preencha todos os campos obrigatórios');
+      return;
+    }
+
+    setLoading(true);
     try {
+      const startAt = new Date(`${selectedDate}T${selectedTime}:00`);
+      const endAt = new Date(startAt.getTime() + selectedService.durationMin * 60000);
+
       const response = await fetch('/api/v1/appointments', {
-        method: 'PUT',
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'x-tenant-id': tenantId
         },
-        body: JSON.stringify({ id, status: 'CANCELED' })
+        body: JSON.stringify({
+          barbershopId: 'cmffwm0ks0002uaoot2x03802',
+          serviceId: selectedService.id,
+          employeeId: selectedEmployee.id,
+          clientId: `client-${Date.now()}`,
+          scheduledAt: startAt.toISOString(),
+          notes: `Cliente: ${clientName}, Telefone: ${clientPhone}`
+        })
       });
 
-      if (!response.ok) {
-        throw new Error('Erro ao cancelar agendamento');
+      if (response.ok) {
+        toast.success('Agendamento realizado com sucesso!');
+        router.push('/dashboard');
+      } else {
+        const error = await response.json();
+        toast.error(`Erro: ${error.message || 'Erro desconhecido'}`);
       }
-      toast.success('Agendamento cancelado');
-      setItems(prev => prev.map(x => x.id === id ? { ...x, status: 'CANCELED' } : x));
-    } catch (e: any) { toast.error(e.message || 'Erro ao cancelar'); }
+    } catch (error) {
+      console.error('Erro ao criar agendamento:', error);
+      toast.error('Erro ao criar agendamento');
+    } finally {
+      setLoading(false);
+    }
   }
 
-  function StatusBadge({ s }: { s: Appt['status'] }) { const v = s === 'CONFIRMED' ? 'default' : s === 'PENDING' ? 'secondary' : 'destructive'; return <Badge variant={v as any}>{s}</Badge>; }
-
-  // === APPEND: map visual para status Prisma ===
-  function statusVariant(s: 'PENDING' | 'CONFIRMED' | 'CANCELED') {
-    if (s === 'CONFIRMED') return 'default';
-    if (s === 'PENDING') return 'secondary';
-    return 'destructive';
-  }
+  const steps = [
+    { id: 'service', label: 'Serviço', icon: '✂️' },
+    { id: 'barber', label: 'Barbeiro', icon: '👨‍💼' },
+    { id: 'datetime', label: 'Data & Hora', icon: '📅' },
+    { id: 'summary', label: 'Resumo', icon: '✅' }
+  ];
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header com navegação */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <Button
-                variant="outline"
-                onClick={() => router.push('/dashboard')}
-                className="flex items-center space-x-2"
-              >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-                <span>Voltar ao Dashboard</span>
-              </Button>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Agenda</h1>
-                <p className="text-sm text-gray-600">Gerencie os agendamentos da barbearia</p>
-              </div>
-            </div>
+    <div className="min-h-screen bg-gray-900 text-white">
+      <Toaster />
+      
+      {/* Header */}
+      <div className="bg-gray-800 border-b border-gray-700">
+        <div className="max-w-4xl mx-auto px-6 py-8">
+          <div className="text-center">
+            <h1 className="text-4xl font-bold mb-2">
+              Barbearia <span className="text-yellow-400">Moderna</span>
+            </h1>
+            <p className="text-gray-300 text-lg">
+              Agende seu horário de forma rápida e fácil
+            </p>
           </div>
         </div>
       </div>
 
-      <div className="mx-auto max-w-5xl p-6 space-y-6">
-        <Toaster />
-        <Card>
-          <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <CardTitle>Filtros e Período</CardTitle>
-            <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto">
-              <div className="min-w-[220px]">
-                <Select value={filterSvc} onValueChange={setFilterSvc}>
-                  <SelectTrigger><SelectValue placeholder="Filtrar por serviço" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos os serviços</SelectItem>
-                    {svcs.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+      {/* Progress Steps */}
+      <div className="bg-gray-800 border-b border-gray-700">
+        <div className="max-w-4xl mx-auto px-6 py-6">
+          <div className="flex justify-center space-x-8">
+            {steps.map((step, index) => {
+              const isActive = currentStep === step.id;
+              const isCompleted = getStepNumber(currentStep) > getStepNumber(step.id as Step);
+              
+              return (
+                <div key={step.id} className="flex flex-col items-center">
+                  <div className={`
+                    w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold mb-2
+                    ${isActive ? 'bg-yellow-400 text-gray-900' : 
+                      isCompleted ? 'bg-green-500 text-white' : 
+                      'bg-gray-600 text-gray-400'}
+                  `}>
+                    {isCompleted ? '✓' : step.icon}
+                  </div>
+                  <span className={`text-sm font-medium ${
+                    isActive ? 'text-yellow-400' : 
+                    isCompleted ? 'text-green-400' : 
+                    'text-gray-400'
+                  }`}>
+                    {step.label}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="max-w-4xl mx-auto px-6 py-8">
+        <Card className="bg-gray-800 border-gray-700">
+          <CardContent className="p-8">
+            
+            {/* Step 1: Service Selection */}
+            {currentStep === 'service' && (
+              <div>
+                <h2 className="text-2xl font-bold mb-2">Escolha o Serviço</h2>
+                <p className="text-gray-400 mb-8">Selecione o serviço desejado</p>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {services.map((service) => (
+                    <Card 
+                      key={service.id}
+                      className={`
+                        cursor-pointer transition-all duration-200 hover:scale-105
+                        ${selectedService?.id === service.id 
+                          ? 'border-yellow-400 bg-yellow-400/10' 
+                          : 'border-gray-600 bg-gray-700 hover:border-gray-500'
+                        }
+                      `}
+                      onClick={() => setSelectedService(service)}
+                    >
+                      <CardContent className="p-6">
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="text-3xl">✂️</div>
+                          {service.name === 'Corte + Barba' && (
+                            <Badge className="bg-yellow-400 text-gray-900">Popular</Badge>
+                          )}
+                        </div>
+                        <h3 className="text-xl font-bold mb-2">{service.name}</h3>
+                        <div className="flex justify-between items-center">
+                          <span className="text-2xl font-bold text-yellow-400">
+                            {formatPrice(service.priceCents)}
+                          </span>
+                          <span className="text-gray-400">
+                            {formatDuration(service.durationMin)}
+                          </span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
               </div>
-              <div className="min-w-[220px]">
-                <Select value={filterEmp} onValueChange={setFilterEmp}>
-                  <SelectTrigger><SelectValue placeholder="Filtrar por funcionário" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos os funcionários</SelectItem>
-                    {employees.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+            )}
+
+            {/* Step 2: Barber Selection */}
+            {currentStep === 'barber' && (
+              <div>
+                <h2 className="text-2xl font-bold mb-2">Escolha o Barbeiro</h2>
+                <p className="text-gray-400 mb-8">Selecione o profissional</p>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {employees.map((employee) => (
+                    <Card 
+                      key={employee.id}
+                      className={`
+                        cursor-pointer transition-all duration-200 hover:scale-105
+                        ${selectedEmployee?.id === employee.id 
+                          ? 'border-yellow-400 bg-yellow-400/10' 
+                          : 'border-gray-600 bg-gray-700 hover:border-gray-500'
+                        }
+                      `}
+                      onClick={() => setSelectedEmployee(employee)}
+                    >
+                      <CardContent className="p-6">
+                        <div className="text-3xl mb-4">👨‍💼</div>
+                        <h3 className="text-xl font-bold">{employee.name}</h3>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
               </div>
-              <Dialog open={open} onOpenChange={setOpen}>
-                <DialogTrigger asChild>
-                  <Button>Novo agendamento</Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Criar agendamento</DialogTitle>
-                  </DialogHeader>
-                  <div className="grid gap-3 py-2">
-                    <div className="grid gap-1">
-                      <Label>Serviço</Label>
-                      <Select value={svc} onValueChange={setSvc}>
-                        <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                        <SelectContent>
-                          {svcs.map(s => <SelectItem key={s.id} value={s.id}>{s.name} · {s.durationMin}m</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="grid gap-1">
-                      <Label>Funcionário</Label>
-                      <Select value={emp} onValueChange={setEmp}>
-                        <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                        <SelectContent>
-                          {employees.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                      <div className="grid gap-1"><Label>Cliente</Label><Input value={cliName} onChange={e => setCliName(e.target.value)} placeholder="Nome" /></div>
-                      <div className="grid gap-1"><Label>Telefone</Label><Input value={cliPhone} onChange={e => setCliPhone(e.target.value)} placeholder="+5511999999999" /></div>
+            )}
+
+            {/* Step 3: Date & Time Selection */}
+            {currentStep === 'datetime' && (
+              <div>
+                <h2 className="text-2xl font-bold mb-2">Data & Hora</h2>
+                <p className="text-gray-400 mb-8">Escolha quando deseja ser atendido</p>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {/* Date Selection */}
+                  <div>
+                    <h3 className="text-lg font-semibold mb-4">Selecione a Data</h3>
+                    <input
+                      type="date"
+                      value={selectedDate}
+                      onChange={(e) => setSelectedDate(e.target.value)}
+                      min={new Date().toISOString().split('T')[0]}
+                      className="w-full p-4 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-yellow-400 focus:outline-none"
+                    />
+                  </div>
+                  
+                  {/* Time Selection */}
+                  <div>
+                    <h3 className="text-lg font-semibold mb-4">Selecione o Horário</h3>
+                    <div className="grid grid-cols-3 gap-2 max-h-64 overflow-y-auto">
+                      {timeSlots.map((slot) => (
+                        <button
+                          key={slot.time}
+                          disabled={!slot.available}
+                          onClick={() => setSelectedTime(slot.time)}
+                          className={`
+                            p-3 rounded-lg text-sm font-medium transition-all
+                            ${!slot.available 
+                              ? 'bg-gray-600 text-gray-500 cursor-not-allowed' 
+                              : selectedTime === slot.time
+                                ? 'bg-yellow-400 text-gray-900'
+                                : 'bg-gray-700 text-white hover:bg-gray-600'
+                            }
+                          `}
+                        >
+                          {slot.time}
+                        </button>
+                      ))}
                     </div>
                   </div>
-                  <DialogFooter>
-                    <Button onClick={createAppt}>Criar</Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            </div>
-          </CardHeader>
-          <CardContent className="grid grid-cols-1 md:grid-cols-5 gap-3">
-            <div className="md:col-span-2">
-              <div className="text-xs text-muted-foreground mb-1">Funcionário (ID)</div>
-              <Input
-                placeholder="Deixe vazio para todos"
-                value={employeeId}
-                onChange={e => setEmployeeId(e.target.value)}
-              />
-            </div>
-            <div>
-              <div className="text-xs text-muted-foreground mb-1">Início</div>
-              <Input type="date" value={start} onChange={e => setStart(e.target.value)} />
-            </div>
-            <div>
-              <div className="text-xs text-muted-foreground mb-1">Dias</div>
-              <Input type="number" min={1} max={30} value={days} onChange={e => setDays(Math.max(1, Math.min(30, Number(e.target.value) || 7)))} />
-            </div>
-            <div className="flex items-end">
-              <Button onClick={load} disabled={loading}>{loading ? 'Carregando...' : 'Recarregar'}</Button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 4: Summary */}
+            {currentStep === 'summary' && (
+              <div>
+                <h2 className="text-2xl font-bold mb-2">Resumo do Agendamento</h2>
+                <p className="text-gray-400 mb-8">Confira os dados antes de confirmar</p>
+                
+                <div className="space-y-6">
+                  {/* Service Summary */}
+                  <div className="bg-gray-700 p-6 rounded-lg">
+                    <h3 className="text-lg font-semibold mb-4">Serviço</h3>
+                    <div className="flex justify-between items-center">
+                      <span>{selectedService?.name}</span>
+                      <span className="text-yellow-400 font-bold">
+                        {selectedService && formatPrice(selectedService.priceCents)}
+                      </span>
+                    </div>
+                    <div className="text-sm text-gray-400 mt-1">
+                      Duração: {selectedService && formatDuration(selectedService.durationMin)}
+                    </div>
+                  </div>
+
+                  {/* Employee Summary */}
+                  <div className="bg-gray-700 p-6 rounded-lg">
+                    <h3 className="text-lg font-semibold mb-4">Barbeiro</h3>
+                    <span>{selectedEmployee?.name}</span>
+                  </div>
+
+                  {/* Date & Time Summary */}
+                  <div className="bg-gray-700 p-6 rounded-lg">
+                    <h3 className="text-lg font-semibold mb-4">Data & Hora</h3>
+                    <span>
+                      {selectedDate && format(new Date(selectedDate), 'dd/MM/yyyy', { locale: ptBR })} às {selectedTime}
+                    </span>
+                  </div>
+
+                  {/* Client Info */}
+                  <div className="bg-gray-700 p-6 rounded-lg">
+                    <h3 className="text-lg font-semibold mb-4">Seus Dados</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm text-gray-400 mb-2">Nome</label>
+                        <input
+                          type="text"
+                          value={clientName}
+                          onChange={(e) => setClientName(e.target.value)}
+                          className="w-full p-3 bg-gray-600 border border-gray-500 rounded-lg text-white focus:border-yellow-400 focus:outline-none"
+                          placeholder="Seu nome completo"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-gray-400 mb-2">Telefone</label>
+                        <input
+                          type="tel"
+                          value={clientPhone}
+                          onChange={(e) => setClientPhone(e.target.value)}
+                          className="w-full p-3 bg-gray-600 border border-gray-500 rounded-lg text-white focus:border-yellow-400 focus:outline-none"
+                          placeholder="(11) 99999-9999"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Navigation Buttons */}
+            <div className="flex justify-between mt-8 pt-6 border-t border-gray-700">
+              <Button
+                onClick={handleBack}
+                variant="outline"
+                className="bg-gray-700 border-gray-600 text-white hover:bg-gray-600"
+              >
+                ← Voltar
+              </Button>
+              
+              <Button
+                onClick={handleNext}
+                disabled={!canProceed() || loading}
+                className="bg-yellow-400 text-gray-900 hover:bg-yellow-500 font-semibold px-8"
+              >
+                {loading ? 'Processando...' : 
+                 currentStep === 'summary' ? 'Confirmar Agendamento' : 'Continuar →'}
+              </Button>
             </div>
           </CardContent>
         </Card>
-
-        {Array.from({ length: days }).map((_, i) => {
-          const d = addDays(range.s, i); const key = d.toISOString().substring(0, 10);
-          const list = (grouped[key] || []).sort((a, b) => a.startAt.localeCompare(b.startAt));
-          return (
-            <Card key={key}>
-              <CardHeader><CardTitle>{key} — {list.length} agendamentos</CardTitle></CardHeader>
-              <CardContent>
-                {list.length === 0 ? (
-                  <div className="text-sm text-muted-foreground">Sem agendamentos</div>
-                ) : (
-                  <div className="divide-y border rounded">
-                    {list.map(a => {
-                      const s = new Date(a.startAt), e = new Date(a.endAt); return (
-                        <div key={a.id} className="p-3 grid grid-cols-1 md:grid-cols-12 gap-2 items-center">
-                          <div className="md:col-span-3 font-medium">{fmtHM(s)}–{fmtHM(e)}</div>
-                          <div className="md:col-span-4">
-                            <div className="font-medium">{a.clientName || 'Cliente'}</div>
-                            <div className="text-xs text-muted-foreground">{a.clientPhone || ''}</div>
-                          </div>
-                          <div className="md:col-span-2"><StatusBadge s={a.status} /></div>
-                          <div className="md:col-span-3 flex gap-2 justify-end">
-                            <Button variant="destructive" disabled={a.status === 'CANCELED'} onClick={() => cancel(a.id)}>Cancelar</Button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
       </div>
     </div>
   );
