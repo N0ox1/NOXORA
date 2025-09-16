@@ -14,8 +14,20 @@ export default function ServicesPage(){
   const [items, setItems] = useState<Service[]>([]);
   const [name, setName] = useState('');
   const [durationMin, setDurationMin] = useState<number>(30);
-  const [priceCents, setPriceCents] = useState<number>(5000);
+  const [priceReais, setPriceReais] = useState<string>('50,00');
   const [loading, setLoading] = useState(false);
+
+  // Função para converter reais (string) para centavos (number)
+  const reaisToCents = (reais: string): number => {
+    const cleanValue = reais.replace(',', '.').replace(/[^\d.-]/g, '');
+    const value = parseFloat(cleanValue) || 0;
+    return Math.round(value * 100);
+  };
+
+  // Função para converter centavos (number) para reais (string)
+  const centsToReais = (cents: number): string => {
+    return (cents / 100).toFixed(2).replace('.', ',');
+  };
 
   async function load(){
     const data = await apiFetch('/api/services', { tenantId });
@@ -27,8 +39,10 @@ export default function ServicesPage(){
     if(!name) return toast.error('Nome obrigatório');
     setLoading(true);
     try{
+      const priceCents = reaisToCents(priceReais);
       await apiFetch('/api/services', { tenantId, init:{ method:'POST', body: JSON.stringify({ barbershopId:'shop_1', name, durationMin, priceCents }) }});
       setName('');
+      setPriceReais('50,00');
       await load();
       toast.success('Serviço criado');
     }catch(e:any){ toast.error(e.message); }
@@ -49,7 +63,7 @@ export default function ServicesPage(){
         <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
           <Input placeholder="Nome" value={name} onChange={e=>setName(e.target.value)} />
           <Input type="number" placeholder="Duração (min)" value={durationMin || ''} onChange={e=>setDurationMin(Number(e.target.value) || 0)} />
-          <Input type="number" placeholder="Preço (centavos)" value={priceCents || ''} onChange={e=>setPriceCents(Number(e.target.value) || 0)} />
+          <Input placeholder="Preço (R$)" value={priceReais} onChange={e=>setPriceReais(e.target.value)} />
           <Button onClick={create} disabled={loading}>{loading?'Criando...':'Criar'}</Button>
         </div>
         <div className="divide-y border rounded">
@@ -57,7 +71,7 @@ export default function ServicesPage(){
             <div key={s.id} className="flex items-center justify-between p-3">
               <div>
                 <div className="font-medium">{s.name}</div>
-                <div className="text-sm text-muted-foreground">{s.durationMin} min · R$ {(s.priceCents/100).toFixed(2)}</div>
+                <div className="text-sm text-muted-foreground">{s.durationMin} min · R$ {centsToReais(s.priceCents)}</div>
               </div>
               <Button variant="destructive" onClick={()=>remove(s.id)}>Excluir</Button>
             </div>

@@ -52,11 +52,23 @@ export default function AdminDashboard() {
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
 
+  // Funções de conversão de preço
+  const reaisToCents = (reais: string): number => {
+    const cleanValue = reais.replace(',', '.').replace(/[^\d.-]/g, '');
+    const value = parseFloat(cleanValue) || 0;
+    return Math.round(value * 100);
+  };
+
+  const centsToReais = (cents: number): string => {
+    return (cents / 100).toFixed(2).replace('.', ',');
+  };
+
   // Estados para formulários
   const [serviceForm, setServiceForm] = useState({
     name: '',
     duration_min: 30,
     price_cents: 0,
+    price_reais: '0,00',
     description: '',
     is_active: true
   });
@@ -147,17 +159,23 @@ export default function AdminDashboard() {
   const handleServiceSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Garantir que price_cents está atualizado
+    const updatedServiceForm = {
+      ...serviceForm,
+      price_cents: reaisToCents(serviceForm.price_reais)
+    };
+
     if (editingService) {
       // Editar serviço existente
       setServices(prev => prev.map(s =>
         s.id === editingService.id
-          ? { ...serviceForm, id: editingService.id }
+          ? { ...updatedServiceForm, id: editingService.id }
           : s
       ));
     } else {
       // Criar novo serviço
       const newService: Service = {
-        ...serviceForm,
+        ...updatedServiceForm,
         id: `srv_${Date.now()}`
       };
       setServices(prev => [...prev, newService]);
@@ -165,7 +183,7 @@ export default function AdminDashboard() {
 
     setShowServiceModal(false);
     setEditingService(null);
-    setServiceForm({ name: '', duration_min: 30, price_cents: 0, description: '', is_active: true });
+    setServiceForm({ name: '', duration_min: 30, price_cents: 0, price_reais: '0,00', description: '', is_active: true });
   };
 
   const handleEditService = (service: Service) => {
@@ -174,6 +192,7 @@ export default function AdminDashboard() {
       name: service.name,
       duration_min: service.duration_min,
       price_cents: service.price_cents,
+      price_reais: centsToReais(service.price_cents),
       description: service.description || '',
       is_active: service.is_active
     });
@@ -608,14 +627,21 @@ export default function AdminDashboard() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Preço (centavos)
+                    Preço (R$)
                   </label>
                   <input
-                    type="number"
-                    value={serviceForm.price_cents}
-                    onChange={(e) => setServiceForm(prev => ({ ...prev, price_cents: parseInt(e.target.value) || 0 }))}
+                    type="text"
+                    value={serviceForm.price_reais}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setServiceForm(prev => ({ 
+                        ...prev, 
+                        price_reais: value,
+                        price_cents: reaisToCents(value)
+                      }));
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    min="0"
+                    placeholder="0,00"
                     required
                   />
                 </div>
@@ -647,7 +673,7 @@ export default function AdminDashboard() {
                     onClick={() => {
                       setShowServiceModal(false);
                       setEditingService(null);
-                      setServiceForm({ name: '', duration_min: 30, price_cents: 0, description: '', is_active: true });
+                      setServiceForm({ name: '', duration_min: 30, price_cents: 0, price_reais: '0,00', description: '', is_active: true });
                     }}
                     className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
                   >
