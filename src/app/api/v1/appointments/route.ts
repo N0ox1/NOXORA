@@ -15,13 +15,21 @@ export const { POST, GET } = api({
 
             // Validate body
             const data = await validate(req, appointmentCreate);
-            
+
             const tenantId = req.headers.get('x-tenant-id');
             if (!tenantId) {
                 return NextResponse.json({ code: 'unauthorized', message: 'Tenant ID obrigatório' }, { status: 401 });
             }
 
             // Criar agendamento no banco
+            const startAt = new Date(data.scheduledAt);
+            const service = await prisma.service.findUnique({
+                where: { id: data.serviceId },
+                select: { durationMin: true }
+            });
+            
+            const endAt = new Date(startAt.getTime() + (service?.durationMin || 30) * 60000);
+            
             const appointment = await prisma.appointment.create({
                 data: {
                     tenantId,
@@ -29,7 +37,8 @@ export const { POST, GET } = api({
                     employeeId: data.employeeId,
                     serviceId: data.serviceId,
                     barbershopId: data.barbershopId,
-                    scheduledAt: new Date(data.scheduledAt),
+                    startAt,
+                    endAt,
                     notes: data.notes || '',
                     status: 'PENDING'
                 },
@@ -46,7 +55,8 @@ export const { POST, GET } = api({
                 employeeId: appointment.employeeId,
                 serviceId: appointment.serviceId,
                 barbershopId: appointment.barbershopId,
-                scheduledAt: appointment.scheduledAt.toISOString(),
+                startAt: appointment.startAt.toISOString(),
+                endAt: appointment.endAt.toISOString(),
                 notes: appointment.notes,
                 status: appointment.status,
                 client: appointment.client,
@@ -56,9 +66,9 @@ export const { POST, GET } = api({
             }, { status: 201 });
         } catch (error) {
             console.error('Erro ao criar agendamento:', error);
-            return NextResponse.json({ 
-                code: 'internal_error', 
-                message: 'Erro ao criar agendamento' 
+            return NextResponse.json({
+                code: 'internal_error',
+                message: 'Erro ao criar agendamento'
             }, { status: 500 });
         }
     },
@@ -82,7 +92,7 @@ export const { POST, GET } = api({
                     employee: { select: { name: true } },
                     service: { select: { name: true, durationMin: true } }
                 },
-                orderBy: { scheduledAt: 'desc' }
+                orderBy: { startAt: 'desc' }
             });
 
             return NextResponse.json({
@@ -93,9 +103,9 @@ export const { POST, GET } = api({
             }, { status: 200 });
         } catch (error) {
             console.error('Erro ao listar agendamentos:', error);
-            return NextResponse.json({ 
-                code: 'internal_error', 
-                message: 'Erro ao listar agendamentos' 
+            return NextResponse.json({
+                code: 'internal_error',
+                message: 'Erro ao listar agendamentos'
             }, { status: 500 });
         }
     }

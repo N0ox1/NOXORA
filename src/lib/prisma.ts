@@ -85,7 +85,7 @@ if (!global.prismaProcessHandlersAdded) {
     await prisma.$disconnect();
     process.exit(0);
   });
-  
+
   global.prismaProcessHandlersAdded = true;
 }
 

@@ -28,7 +28,7 @@ export const { GET } = api({
             const where: any = { tenantId };
 
             if (start && end) {
-                where.scheduledAt = {
+                where.startAt = {
                     gte: new Date(start),
                     lte: new Date(end)
                 };
@@ -50,7 +50,7 @@ export const { GET } = api({
                     employee: { select: { name: true } },
                     service: { select: { name: true, durationMin: true } }
                 },
-                orderBy: { scheduledAt: 'asc' }
+                orderBy: { startAt: 'asc' }
             });
 
             return NextResponse.json({
