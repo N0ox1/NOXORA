@@ -10,7 +10,12 @@ interface AddonsSectionProps {
 }
 
 export function AddonsSection({ currentAddons = [], onAddonToggle }: AddonsSectionProps) {
-  const addons = billingService.getAddons().map(a=>({ ...a, label: a.name, priceLabel: (a as any).price || 'R$ 0,00' })) as any;
+  const addons = billingService.getAddons().map(addon => ({
+    ...addon,
+    label: addon.name,
+    price_formatted: `R$ ${addon.price_month}`,
+    description: addon.name
+  }));
 
   const handleAddonToggle = (addonCode: string) => {
     const isCurrentlyEnabled = currentAddons.includes(addonCode);

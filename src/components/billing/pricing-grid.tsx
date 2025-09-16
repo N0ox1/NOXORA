@@ -32,15 +32,37 @@ export function PricingGrid({ currentPlan, onPlanSelect }: PricingGridProps) {
       </div>
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-3 lg:gap-6">
-        {plans.map((plan: any) => (
-          <PricingCard
-            key={plan.code}
-            plan={plan}
-            isPopular={plan.code === popularPlanCode}
-            currentPlan={currentPlan}
-            onSelect={handlePlanSelect}
-          />
-        ))}
+        {plans.map((plan: any) => {
+          // Transformar features object em array para o componente
+          const featuresArray = Object.entries(plan.features || {})
+            .filter(([_, enabled]) => enabled)
+            .map(([feature, _]) => {
+              const featureNames: Record<string, string> = {
+                multi_location: 'Múltiplas localizações',
+                advanced_reporting: 'Relatórios avançados',
+                sms_notifications: 'Notificações SMS',
+                custom_branding: 'Marca personalizada',
+                priority_support: 'Suporte prioritário',
+                webhooks: 'Webhooks',
+                api_access: 'Acesso à API'
+              };
+              return featureNames[feature] || feature;
+            });
+
+          return (
+            <PricingCard
+              key={plan.code}
+              plan={{
+                ...plan,
+                price_formatted: `R$ ${plan.price_month}`,
+                features: featuresArray
+              }}
+              isPopular={plan.code === popularPlanCode}
+              currentPlan={currentPlan}
+              onSelect={handlePlanSelect}
+            />
+          );
+        })}
       </div>
 
       <div className="mt-12 text-center">
