@@ -56,7 +56,7 @@ export async function DELETE(req: NextRequest) {
         const tenantId = ensureTenant(req);
         const { searchParams } = new URL(req.url);
         const serviceId = searchParams.get('id');
-        
+
         if (!serviceId) {
             return NextResponse.json({ code: 'validation_error', message: 'ID do serviço é obrigatório' }, { status: 400 });
         }

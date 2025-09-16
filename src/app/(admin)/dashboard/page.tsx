@@ -182,7 +182,7 @@ export default function AdminDashboard() {
             'x-tenant-id': 'cmffwm0j20000uaoo2c4ugtvx'
           },
           body: JSON.stringify({
-            barbershopId: 'shop_1', // ID fixo para desenvolvimento
+            barbershopId: 'cmffwm0ks0002uaoot2x03802', // ID real da barbearia do banco
             name: updatedServiceForm.name,
             durationMin: updatedServiceForm.duration_min,
             priceCents: updatedServiceForm.price_cents,
@@ -196,7 +196,14 @@ export default function AdminDashboard() {
           alert('Serviço criado com sucesso!');
         } else {
           const error = await response.json();
-          alert(`Erro ao criar serviço: ${error.message || 'Erro desconhecido'}`);
+          console.error('Erro detalhado:', error);
+          if (error.errors) {
+            // Erro de validação Zod
+            const errorMessages = Object.values(error.errors).flat();
+            alert(`Erro de validação: ${errorMessages.join(', ')}`);
+          } else {
+            alert(`Erro ao criar serviço: ${error.message || 'Erro desconhecido'}`);
+          }
         }
       }
 
