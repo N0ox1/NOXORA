@@ -25,7 +25,8 @@ export const { GET, PUT, DELETE } = api({
       employeeId: '123e4567-e89b-12d3-a456-426614174000',
       serviceId: '123e4567-e89b-12d3-a456-426614174000',
       barbershopId: '123e4567-e89b-12d3-a456-426614174000',
-      scheduledAt: new Date().toISOString(),
+      startAt: new Date().toISOString(),
+      endAt: new Date(Date.now() + 30 * 60000).toISOString(),
       notes: 'Appointment notes',
       createdAt: new Date().toISOString()
     }, { status: 200 });

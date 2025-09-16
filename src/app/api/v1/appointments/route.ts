@@ -5,6 +5,7 @@ import { api } from '@/app/api/(helpers)/handler';
 import { validate } from '@/lib/validate';
 import { validateHeaders } from '@/lib/validation/middleware';
 import { appointmentCreate } from '@/lib/validation/schemas';
+import { prisma } from '@/lib/prisma';
 
 export const { POST, GET } = api({
     POST: async (req: NextRequest) => {
@@ -27,9 +28,9 @@ export const { POST, GET } = api({
                 where: { id: data.serviceId },
                 select: { durationMin: true }
             });
-            
+
             const endAt = new Date(startAt.getTime() + (service?.durationMin || 30) * 60000);
-            
+
             const appointment = await prisma.appointment.create({
                 data: {
                     tenantId,
@@ -43,9 +44,9 @@ export const { POST, GET } = api({
                     status: 'PENDING'
                 },
                 include: {
-                    client: { select: { name: true, phone: true } },
-                    employee: { select: { name: true } },
-                    service: { select: { name: true, durationMin: true } }
+                    clients: { select: { name: true, phone: true } },
+                    employees: { select: { name: true } },
+                    services: { select: { name: true, durationMin: true } }
                 }
             });
 
@@ -59,9 +60,9 @@ export const { POST, GET } = api({
                 endAt: appointment.endAt.toISOString(),
                 notes: appointment.notes,
                 status: appointment.status,
-                client: appointment.client,
-                employee: appointment.employee,
-                service: appointment.service,
+                client: appointment.clients,
+                employee: appointment.employees,
+                service: appointment.services,
                 createdAt: appointment.createdAt.toISOString()
             }, { status: 201 });
         } catch (error) {
@@ -88,9 +89,9 @@ export const { POST, GET } = api({
             const appointments = await prisma.appointment.findMany({
                 where: { tenantId },
                 include: {
-                    client: { select: { name: true, phone: true } },
-                    employee: { select: { name: true } },
-                    service: { select: { name: true, durationMin: true } }
+                    clients: { select: { name: true, phone: true } },
+                    employees: { select: { name: true } },
+                    services: { select: { name: true, durationMin: true } }
                 },
                 orderBy: { startAt: 'desc' }
             });

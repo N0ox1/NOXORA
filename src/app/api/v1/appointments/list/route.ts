@@ -46,9 +46,9 @@ export const { GET } = api({
             const appointments = await prisma.appointment.findMany({
                 where,
                 include: {
-                    client: { select: { name: true, phone: true } },
-                    employee: { select: { name: true } },
-                    service: { select: { name: true, durationMin: true } }
+                    clients: { select: { name: true, phone: true } },
+                    employees: { select: { name: true } },
+                    services: { select: { name: true, durationMin: true } }
                 },
                 orderBy: { startAt: 'asc' }
             });
