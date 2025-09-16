@@ -77,10 +77,10 @@ export const serviceUpdate = z.object({
 
 // Appointment schemas
 export const appointmentCreate = z.object({
-    clientId: uuid,
-    employeeId: uuid,
-    serviceId: uuid,
-    barbershopId: uuid,
+    clientId: cuid,
+    employeeId: cuid,
+    serviceId: cuid,
+    barbershopId: cuid,
     scheduledAt: z.string().datetime(),
     notes: z.string().max(500).optional()
 });
@@ -120,5 +120,5 @@ export const stripeWebhook = z.object({
 
 // Common params
 export const idParam = z.object({
-    id: uuid
+    id: cuid
 });

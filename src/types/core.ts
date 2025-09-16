@@ -2,7 +2,7 @@
 export type TenantPlan = 'STARTER' | 'PRO' | 'SCALE';
 export type TenantStatus = 'ACTIVE' | 'PAST_DUE' | 'CANCELED' | 'TRIALING';
 export type EmployeeRole = 'OWNER' | 'MANAGER' | 'BARBER' | 'ASSISTANT';
-export type AppointmentStatus = 'PENDING' | 'CONFIRMED' | 'CANCELED' | 'NO_SHOW' | 'DONE';
+export type AppointmentStatus = 'CONFIRMED' | 'CANCELED' | 'NO_SHOW' | 'DONE';
 
 // Interfaces principais
 export interface Tenant {

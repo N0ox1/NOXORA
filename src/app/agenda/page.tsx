@@ -14,7 +14,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 
-interface Appt { id: string; startAt: string; endAt: string; status: 'PENDING' | 'CONFIRMED' | 'CANCELED'; serviceId: string; employeeId: string; clientName?: string; clientPhone?: string; barbershopId: string }
+interface Appt { id: string; startAt: string; endAt: string; status: 'CONFIRMED' | 'CANCELED'; serviceId: string; employeeId: string; clientName?: string; clientPhone?: string; barbershopId: string }
 interface Employee { id: string; name: string }
 
 export default function AgendaPage() {
@@ -70,22 +70,26 @@ export default function AgendaPage() {
     try {
       const startDate = new Date(start);
       const endDate = addDays(startDate, days);
-      
+
       const qs = new URLSearchParams({
         start: startOfDay(startDate).toISOString(),
         end: startOfDay(endDate).toISOString()
       });
-      
+
       if (filterEmp !== 'all') qs.set('employeeId', filterEmp);
       if (filterSvc !== 'all') qs.set('serviceId', filterSvc);
-      
+
       const response = await fetch(`/api/v1/appointments/list?${qs.toString()}`, {
         headers: { 'x-tenant-id': tenantId }
       });
-      
+
       if (response.ok) {
         const data = await response.json();
-        setItems(data.items || []);
+        // Filtrar agendamentos cancelados - mostrar apenas CONFIRMED
+        const filteredItems = (data.items || []).filter((item: any) =>
+          item.status === 'CONFIRMED'
+        );
+        setItems(filteredItems);
       } else {
         toast.error('Erro ao carregar agendamentos');
       }
@@ -141,20 +145,20 @@ export default function AgendaPage() {
 
   async function cancel(id: string) {
     try {
-      const response = await fetch('/api/v1/appointments', {
-        method: 'PUT',
+      const response = await fetch(`/api/v1/appointments/${id}`, {
+        method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
           'x-tenant-id': tenantId
-        },
-        body: JSON.stringify({ id, status: 'CANCELED' })
+        }
       });
 
       if (response.ok) {
         toast.success('Agendamento cancelado!');
         load();
       } else {
-        toast.error('Erro ao cancelar agendamento');
+        const error = await response.json();
+        toast.error(`Erro ao cancelar agendamento: ${error.message || 'Erro desconhecido'}`);
       }
     } catch (error) {
       console.error('Erro ao cancelar agendamento:', error);

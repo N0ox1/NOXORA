@@ -6,11 +6,13 @@ import {
   PlusIcon,
   PencilIcon,
   TrashIcon,
-  CalendarDaysIcon,
   UserGroupIcon,
   CogIcon,
+  CalendarDaysIcon,
+  UsersIcon,
   EyeIcon
 } from '@heroicons/react/24/outline';
+import { ImageIcon, Globe } from 'lucide-react';
 
 interface Service {
   id: string;
@@ -32,20 +34,40 @@ interface Employee {
 
 interface Appointment {
   id: string;
-  client_name: string;
-  service_name: string;
-  employee_name: string;
-  start_at: string;
-  duration_min: number;
-  status: 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED';
+  startAt: string;
+  endAt: string;
+  status: 'CONFIRMED' | 'CANCELED';
+  serviceId: string;
+  employeeId: string;
+  clientName?: string;
+  clientPhone?: string;
+  barbershopId: string;
+  clients?: { name: string; phone: string };
+  service?: { name: string };
+  employee?: { name: string };
 }
 
+interface Client {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  createdAt: string;
+}
+
+
+
+
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState<'services' | 'employees' | 'agenda'>('services');
+  const [activeTab, setActiveTab] = useState<'services' | 'employees' | 'agenda' | 'configurations' | 'clients'>('services');
   const [services, setServices] = useState<Service[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [days, setDays] = useState<number>(7);
+  const [filterEmp, setFilterEmp] = useState<string>('all');
+  const [filterSvc, setFilterSvc] = useState<string>('all');
 
   // Estados para modais
   const [showServiceModal, setShowServiceModal] = useState(false);
@@ -87,6 +109,7 @@ export default function AdminDashboard() {
     loadServices();
     loadEmployees();
     loadAppointments();
+    loadClients();
   }, []);
 
   // Funções para carregar dados reais
@@ -143,27 +166,65 @@ export default function AdminDashboard() {
 
   const loadAppointments = async () => {
     try {
-      const response = await fetch('/api/v1/appointments/list', {
+      const startDate = new Date(selectedDate);
+      const endDate = new Date(startDate);
+      endDate.setDate(endDate.getDate() + days);
+
+      const qs = new URLSearchParams({
+        start: startDate.toISOString(),
+        end: endDate.toISOString()
+      });
+
+      if (filterEmp !== 'all') qs.set('employeeId', filterEmp);
+      if (filterSvc !== 'all') qs.set('serviceId', filterSvc);
+
+      const response = await fetch(`/api/v1/appointments/list?${qs.toString()}`, {
+        headers: {
+          'x-tenant-id': 'cmffwm0j20000uaoo2c4ugtvx'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const filteredItems = (data.items || []).filter((item: any) =>
+          item.status === 'CONFIRMED'
+        );
+        setAppointments(filteredItems);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar agendamentos:', error);
+    }
+  };
+
+  const loadClients = async () => {
+    try {
+      const response = await fetch('/api/v1/clients', {
         headers: {
           'x-tenant-id': 'cmffwm0j20000uaoo2c4ugtvx'
         }
       });
       if (response.ok) {
         const data = await response.json();
-        setAppointments(data.items?.map((a: any) => ({
-          id: a.id,
-          client_name: a.client?.name || 'Cliente',
-          service_name: a.service?.name || 'Serviço',
-          employee_name: a.employee?.name || 'Funcionário',
-          start_at: a.startAt,
-          duration_min: 30,
-          status: a.status
-        })) || []);
+        console.log('📋 Dados de clientes recebidos:', data);
+        setClients(data.map((c: any) => ({
+          id: c.id,
+          name: c.name,
+          email: c.email,
+          phone: c.phone,
+          createdAt: c.createdAt
+        })));
+      } else {
+        console.error('❌ Erro na resposta da API de clientes:', response.status, response.statusText);
+        const errorText = await response.text();
+        console.error('❌ Resposta de erro:', errorText);
       }
     } catch (error) {
-      console.error('Erro ao carregar agendamentos:', error);
+      console.error('❌ Erro ao carregar clientes:', error);
     }
   };
+
+
+
 
   // Handlers para Services
   const handleServiceSubmit = async (e: React.FormEvent) => {
@@ -321,12 +382,14 @@ export default function AdminDashboard() {
     });
   };
 
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('pt-BR');
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'CONFIRMED': return 'bg-green-100 text-green-800';
-      case 'PENDING': return 'bg-yellow-100 text-yellow-800';
-      case 'COMPLETED': return 'bg-blue-100 text-blue-800';
-      case 'CANCELLED': return 'bg-red-100 text-red-800';
+      case 'CANCELED': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -334,12 +397,13 @@ export default function AdminDashboard() {
   const getStatusText = (status: string) => {
     switch (status) {
       case 'CONFIRMED': return 'Confirmado';
-      case 'PENDING': return 'Pendente';
-      case 'COMPLETED': return 'Concluído';
-      case 'CANCELLED': return 'Cancelado';
+      case 'CANCELED': return 'Cancelado';
       default: return status;
     }
   };
+
+
+
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -350,18 +414,6 @@ export default function AdminDashboard() {
             <div>
               <h1 className="text-3xl font-bold text-gray-900">Dashboard Admin</h1>
               <p className="text-gray-600 mt-1">Gerencie sua barbearia</p>
-            </div>
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={() => window.location.href = '/agenda'}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
-              >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                <span>Agenda</span>
-              </button>
-              <span className="text-sm text-gray-500">Barber Labs Centro</span>
             </div>
           </div>
         </div>
@@ -389,7 +441,7 @@ export default function AdminDashboard() {
                 }`}
             >
               <UserGroupIcon className="h-5 w-5 inline mr-2" />
-              Funcionários
+              Colaboradores
             </button>
             <button
               onClick={() => setActiveTab('agenda')}
@@ -400,6 +452,26 @@ export default function AdminDashboard() {
             >
               <CalendarDaysIcon className="h-5 w-5 inline mr-2" />
               Agenda
+            </button>
+            <button
+              onClick={() => setActiveTab('configurations')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'configurations'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+            >
+              <CogIcon className="h-5 w-5 inline mr-2" />
+              Configurações
+            </button>
+            <button
+              onClick={() => setActiveTab('clients')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'clients'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+            >
+              <UsersIcon className="h-5 w-5 inline mr-2" />
+              Clientes
             </button>
           </nav>
         </div>
@@ -489,7 +561,7 @@ export default function AdminDashboard() {
         {activeTab === 'employees' && (
           <div>
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-900">Funcionários</h2>
+              <h2 className="text-2xl font-bold text-gray-900">Colaboradores</h2>
               <button
                 onClick={() => setShowEmployeeModal(true)}
                 className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center"
@@ -573,76 +645,404 @@ export default function AdminDashboard() {
         {activeTab === 'agenda' && (
           <div>
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-900">Agenda Diária</h2>
-              <div className="flex items-center space-x-4">
-                <input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="border border-gray-300 rounded-md px-3 py-2"
-                />
+              <h2 className="text-2xl font-bold text-gray-900">Agenda</h2>
+            </div>
+
+            {/* Filtros */}
+            <div className="bg-white shadow rounded-lg p-6 mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Data Inicial</label>
+                  <input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Dias</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="30"
+                    value={days}
+                    onChange={(e) => setDays(Math.max(1, Math.min(30, Number(e.target.value) || 7)))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Funcionário</label>
+                  <select
+                    value={filterEmp}
+                    onChange={(e) => setFilterEmp(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">Todos os funcionários</option>
+                    {employees.map(emp => (
+                      <option key={emp.id} value={emp.id}>{emp.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Serviço</label>
+                  <select
+                    value={filterSvc}
+                    onChange={(e) => setFilterSvc(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">Todos os serviços</option>
+                    {services.map(svc => (
+                      <option key={svc.id} value={svc.id}>{svc.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="mt-4">
+                <button
+                  onClick={loadAppointments}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Recarregar
+                </button>
               </div>
             </div>
 
-            <div className="bg-white shadow rounded-lg overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Horário
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Cliente
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Serviço
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Profissional
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Ações
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {appointments.map((appointment) => (
-                    <tr key={appointment.id}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {formatTime(appointment.start_at)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {appointment.client_name}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {appointment.service_name}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {appointment.employee_name}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(appointment.status)}`}>
-                          {getStatusText(appointment.status)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <button className="text-blue-600 hover:text-blue-900 mr-3">
-                          <EyeIcon className="h-4 w-4" />
-                        </button>
-                        <button className="text-green-600 hover:text-green-900 mr-3">
-                          <PencilIcon className="h-4 w-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            {/* Lista de agendamentos */}
+            <div className="space-y-4">
+              {Array.from({ length: days }).map((_, i) => {
+                const currentDate = new Date(selectedDate);
+                currentDate.setDate(currentDate.getDate() + i);
+                const dateKey = currentDate.toISOString().substring(0, 10);
+                const dayAppointments = appointments.filter(apt =>
+                  apt.startAt.substring(0, 10) === dateKey
+                ).sort((a, b) => a.startAt.localeCompare(b.startAt));
+
+                return (
+                  <div key={dateKey} className="bg-white shadow rounded-lg overflow-hidden">
+                    <div className="px-6 py-4 border-b border-gray-200">
+                      <h3 className="text-lg font-medium text-gray-900">
+                        {formatDate(dateKey)} — {dayAppointments.length} agendamentos
+                      </h3>
+                    </div>
+                    <div className="p-6">
+                      {dayAppointments.length === 0 ? (
+                        <div className="text-sm text-gray-500">Sem agendamentos</div>
+                      ) : (
+                        <div className="space-y-3">
+                          {dayAppointments.map(appointment => (
+                            <div key={appointment.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                              <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-4">
+                                <div>
+                                  <div className="font-medium text-gray-900">
+                                    {formatTime(appointment.startAt)} - {formatTime(appointment.endAt)}
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="font-medium text-gray-900">
+                                    {appointment.clients?.name || 'Cliente'}
+                                  </div>
+                                  <div className="text-sm text-gray-500">
+                                    {appointment.clients?.phone || ''}
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="text-sm text-gray-900">
+                                    {appointment.service?.name || 'Serviço'}
+                                  </div>
+                                  <div className="text-sm text-gray-500">
+                                    {appointment.employee?.name || 'Funcionário'}
+                                  </div>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(appointment.status)}`}>
+                                    {getStatusText(appointment.status)}
+                                  </span>
+                                  <button
+                                    onClick={() => {
+                                      // Implementar cancelamento
+                                      console.log('Cancelar agendamento:', appointment.id);
+                                    }}
+                                    className="text-red-600 hover:text-red-900 text-sm"
+                                  >
+                                    Cancelar
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
+
+        {activeTab === 'configurations' && (
+          <div>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-gray-900">Configurações da Barbearia</h2>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Informações Básicas */}
+              <div className="bg-white shadow rounded-lg p-6">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Informações Básicas</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Nome da Barbearia</label>
+                    <input
+                      type="text"
+                      defaultValue="Barber Labs Centro"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Slug</label>
+                    <input
+                      type="text"
+                      defaultValue="barber-labs-centro"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
+                    <textarea
+                      defaultValue="A melhor barbearia do centro da cidade"
+                      rows={3}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Contato */}
+              <div className="bg-white shadow rounded-lg p-6">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Contato</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Endereço</label>
+                    <input
+                      type="text"
+                      defaultValue="Rua Exemplo, 123 - Centro, Cidade"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Telefone</label>
+                    <input
+                      type="text"
+                      defaultValue="(11) 98765-4321"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                    <input
+                      type="email"
+                      defaultValue="contato@barberlabs.com"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Instagram</label>
+                    <input
+                      type="text"
+                      defaultValue="@barberlabs"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Logo e Banner */}
+              <div className="bg-white shadow rounded-lg p-6">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Logo da Barbearia</h3>
+                <div className="space-y-4">
+                  <div className="flex items-center space-x-4">
+                    <div className="w-20 h-20 bg-gray-100 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300">
+                      <ImageIcon className="h-8 w-8 text-gray-400" />
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Upload do Logo</label>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">PNG, JPG até 2MB. Recomendado: 200x200px</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Banner */}
+              <div className="bg-white shadow rounded-lg p-6">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Banner da Barbearia</h3>
+                <div className="space-y-4">
+                  <div className="w-full h-32 bg-gray-100 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300">
+                    <div className="text-center">
+                      <ImageIcon className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                      <p className="text-sm text-gray-500">Banner Preview</p>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Upload do Banner</label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">PNG, JPG até 5MB. Recomendado: 1200x400px</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Horário de Funcionamento */}
+              <div className="bg-white shadow rounded-lg p-6 lg:col-span-2">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Horário de Funcionamento</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'].map((day, index) => (
+                    <div key={day} className="flex items-center space-x-2">
+                      <div className="w-20 text-sm font-medium text-gray-700">{day}</div>
+                      <input
+                        type="time"
+                        defaultValue={index === 6 ? "00:00" : "09:00"}
+                        className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                      />
+                      <span className="text-gray-500">-</span>
+                      <input
+                        type="time"
+                        defaultValue={index === 6 ? "00:00" : index === 5 ? "14:00" : "18:00"}
+                        className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                      />
+                      <input
+                        type="checkbox"
+                        defaultChecked={index === 6 ? false : true}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Preview da URL Pública */}
+              <div className="bg-white shadow rounded-lg p-6 lg:col-span-2">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Preview da URL Pública</h3>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <Globe className="h-4 w-4 text-gray-500" />
+                    <span className="text-sm font-medium text-gray-700">URL da sua barbearia:</span>
+                  </div>
+                  <code className="text-sm text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                    https://noxoraa.vercel.app/b/barber-labs-centro
+                  </code>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Esta é a URL que seus clientes usarão para fazer agendamentos.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end">
+              <button className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                Salvar Configurações
+              </button>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'clients' && (
+          <div>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-gray-900">Clientes</h2>
+              <button
+                onClick={loadClients}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Recarregar
+              </button>
+            </div>
+
+            {/* Debug info */}
+            <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <p className="text-sm text-yellow-800">
+                <strong>Debug:</strong> Total de clientes carregados: {clients.length}
+              </p>
+            </div>
+
+            <div className="bg-white shadow rounded-lg overflow-hidden">
+              {clients.length === 0 ? (
+                <div className="p-8 text-center">
+                  <UsersIcon className="mx-auto h-12 w-12 text-gray-400" />
+                  <h3 className="mt-2 text-sm font-medium text-gray-900">Nenhum cliente encontrado</h3>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Os clientes aparecerão aqui quando fizerem agendamentos.
+                  </p>
+                </div>
+              ) : (
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Cliente
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Email
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Telefone
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Data de Cadastro
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Ações
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {clients.map((client) => (
+                      <tr key={client.id}>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center mr-3">
+                              <span className="text-sm font-medium text-gray-700">
+                                {client.name.charAt(0).toUpperCase()}
+                              </span>
+                            </div>
+                            <div className="text-sm font-medium text-gray-900">{client.name}</div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {client.email}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {client.phone}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {formatDate(client.createdAt)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <button className="text-blue-600 hover:text-blue-900 mr-3">
+                            <PencilIcon className="h-4 w-4" />
+                          </button>
+                          <button className="text-red-600 hover:text-red-900">
+                            <TrashIcon className="h-4 w-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        )}
+
       </div>
 
       {/* Modal de Serviço */}

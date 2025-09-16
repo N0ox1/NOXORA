@@ -10,17 +10,26 @@ import { prisma } from '@/lib/prisma';
 export const { POST, GET } = api({
     POST: async (req: NextRequest) => {
         try {
+            console.log('=== INÍCIO DA CRIAÇÃO DE AGENDAMENTO ===');
+
             // Validate headers first
             const headerError = validateHeaders(req);
-            if (headerError) return headerError;
+            if (headerError) {
+                console.log('Erro de headers:', headerError);
+                return headerError;
+            }
 
             // Validate body
+            console.log('Validando body...');
             const data = await validate(req, appointmentCreate);
+            console.log('Dados validados:', data);
 
             const tenantId = req.headers.get('x-tenant-id');
             if (!tenantId) {
+                console.log('Tenant ID não encontrado');
                 return NextResponse.json({ code: 'unauthorized', message: 'Tenant ID obrigatório' }, { status: 401 });
             }
+            console.log('Tenant ID:', tenantId);
 
             // Criar agendamento no banco
             const startAt = new Date(data.scheduledAt);
@@ -41,7 +50,7 @@ export const { POST, GET } = api({
                     startAt,
                     endAt,
                     notes: data.notes || '',
-                    status: 'PENDING'
+                    status: 'CONFIRMED'
                 },
                 include: {
                     clients: { select: { name: true, phone: true } },
@@ -67,9 +76,22 @@ export const { POST, GET } = api({
             }, { status: 201 });
         } catch (error) {
             console.error('Erro ao criar agendamento:', error);
+            console.error('Detalhes do erro:', {
+                message: error.message,
+                stack: error.stack,
+                name: error.name,
+                constructor: error.constructor.name
+            });
+
+            // Se for HttpError, retornar o status correto
+            if (error.status && error.body) {
+                return NextResponse.json(error.body, { status: error.status });
+            }
+
             return NextResponse.json({
                 code: 'internal_error',
-                message: 'Erro ao criar agendamento'
+                message: 'Erro ao criar agendamento',
+                details: error.message
             }, { status: 500 });
         }
     },

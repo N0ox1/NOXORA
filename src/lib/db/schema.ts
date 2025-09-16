@@ -5,7 +5,7 @@ import { relations } from 'drizzle-orm';
 export const tenantPlanEnum = pgEnum('tenant_plan', ['STARTER', 'PRO', 'SCALE']);
 export const tenantStatusEnum = pgEnum('tenant_status', ['ACTIVE', 'PAST_DUE', 'CANCELED', 'TRIALING']);
 export const employeeRoleEnum = pgEnum('employee_role', ['OWNER', 'MANAGER', 'BARBER', 'ASSISTANT']);
-export const appointmentStatusEnum = pgEnum('appointment_status', ['PENDING', 'CONFIRMED', 'CANCELED', 'NO_SHOW', 'DONE']);
+export const appointmentStatusEnum = pgEnum('appointment_status', ['CONFIRMED', 'CANCELED', 'NO_SHOW', 'DONE']);
 
 // Tabela de tenants
 export const tenants = pgTable('tenants', {
@@ -85,7 +85,7 @@ export const appointments = pgTable('appointments', {
   serviceId: uuid('service_id').notNull().references(() => services.id),
   startAt: timestamp('start_at').notNull(),
   endAt: timestamp('end_at').notNull(),
-  status: appointmentStatusEnum('status').notNull().default('PENDING'),
+  status: appointmentStatusEnum('status').notNull().default('CONFIRMED'),
   notes: text('notes'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),

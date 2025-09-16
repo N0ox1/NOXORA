@@ -7,7 +7,7 @@ export default function AdminPage() {
   const sections = [
     { href: '/admin/clients', label: 'Clientes', description: 'Gerenciar clientes' },
     { href: '/admin/services', label: 'Serviços', description: 'Gerenciar serviços' },
-    { href: '/admin/employees', label: 'Funcionários', description: 'Gerenciar funcionários' },
+    { href: '/admin/employees', label: 'Configurações', description: 'Configurar barbearia' },
     { href: '/agenda', label: 'Agenda', description: 'Visualizar agenda' }
   ];
 
@@ -17,7 +17,7 @@ export default function AdminPage() {
         <h1 className="text-3xl font-bold">Painel Administrativo</h1>
         <p className="text-muted-foreground">Gerencie sua barbearia</p>
       </div>
-      
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {sections.map(section => (
           <Card key={section.href} className="hover:shadow-md transition-shadow">

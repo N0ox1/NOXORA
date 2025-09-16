@@ -5,6 +5,7 @@ import { api } from '@/app/api/(helpers)/handler';
 import { validate } from '@/lib/validate';
 import { validateHeaders, validateParams } from '@/lib/validation/middleware';
 import { idParam, appointmentUpdate } from '@/lib/validation/schemas';
+import { prisma } from '@/lib/prisma';
 
 export const { GET, PUT, DELETE } = api({
   GET: async (req: NextRequest, context?: { params: any }) => {
@@ -56,20 +57,62 @@ export const { GET, PUT, DELETE } = api({
 
   DELETE: async (req: NextRequest, context?: { params: any }) => {
     const { params } = context || { params: {} };
-    // Validate headers
-    const headerError = validateHeaders(req);
-    if (headerError) return headerError;
+    try {
+      console.log('🧪 DELETE - Params recebidos:', params);
 
-    // Validate params
-    const paramResult = validateParams(idParam)(req, params);
-    if (paramResult instanceof NextResponse) return paramResult;
+      // Validate headers (sem Content-Type para DELETE)
+      const tenantId = req.headers.get('x-tenant-id');
+      if (!tenantId) {
+        return NextResponse.json({ code: 'unauthorized', message: 'Tenant ID obrigatório' }, { status: 401 });
+      }
 
-    // TODO: Implement actual appointment deletion with Prisma
-    // This is a placeholder response
-    return NextResponse.json({
-      id: params.id,
-      deleted: true,
-      deletedAt: new Date().toISOString()
-    }, { status: 200 });
+      // Validar ID diretamente (sem usar validateParams por enquanto)
+      if (!params.id) {
+        return NextResponse.json({ code: 'validation_error', message: 'ID é obrigatório' }, { status: 422 });
+      }
+
+      // Buscar o agendamento
+      const appointment = await prisma.appointment.findFirst({
+        where: {
+          id: params.id,
+          tenantId
+        }
+      });
+
+      if (!appointment) {
+        return NextResponse.json({ code: 'not_found', message: 'Agendamento não encontrado' }, { status: 404 });
+      }
+
+      // Atualizar status para CANCELED
+      const updatedAppointment = await prisma.appointment.update({
+        where: { id: params.id },
+        data: { status: 'CANCELED' },
+        include: {
+          clients: { select: { name: true, phone: true } },
+          employees: { select: { name: true } },
+          services: { select: { name: true, durationMin: true } }
+        }
+      });
+
+      return NextResponse.json({
+        id: updatedAppointment.id,
+        status: updatedAppointment.status,
+        client: updatedAppointment.clients,
+        employee: updatedAppointment.employees,
+        service: updatedAppointment.services,
+        startAt: updatedAppointment.startAt.toISOString(),
+        endAt: updatedAppointment.endAt.toISOString(),
+        notes: updatedAppointment.notes,
+        updatedAt: updatedAppointment.updatedAt.toISOString()
+      }, { status: 200 });
+
+    } catch (error: any) {
+      console.error('Erro ao cancelar agendamento:', error);
+      return NextResponse.json({
+        code: 'internal_error',
+        message: 'Erro ao cancelar agendamento',
+        details: error.message
+      }, { status: 500 });
+    }
   }
 });
