@@ -6,7 +6,7 @@
     "test:rbac:auto": "start-server-and-test dev http://localhost:3000/api/health test:rbac",
     "test:rbac:local": "cross-env BASE_URL=http://localhost:3000 tsx ./scripts/test.rbac.mjs",
     "sync:env": "node scripts/sync-env.js",
-    "postinstall": "node scripts/sync-env.js",
+    "postinstall": "prisma generate && node scripts/sync-env.js",
     "typecheck:s5": "tsc -p tsconfig.s5.json",
     "seed:s6:min": "tsx scripts/seed.s6.min.ts",
     "seed:s6:employee": "tsx scripts/seed.s6.employee.ts",

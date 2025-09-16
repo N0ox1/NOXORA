@@ -36,3 +36,4 @@ export default async function testAppointmentsDaily() {
     return 'appointments daily ok';
 }
 
+

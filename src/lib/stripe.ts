@@ -3,9 +3,9 @@ import { config } from './config';
 
 // Configuração do Stripe
 const stripeConfig = {
-  publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || 'pk_test_YOUR_STRIPE_PUBLISHABLE_KEY_HERE',
-  secretKey: process.env.STRIPE_SECRET_KEY || 'sk_test_YOUR_STRIPE_SECRET_KEY_HERE',
-  webhookSecret: process.env.STRIPE_WEBHOOK_SECRET || 'whsec_your_webhook_secret_here',
+  publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || 'pk_test_placeholder',
+  secretKey: process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder',
+  webhookSecret: process.env.STRIPE_WEBHOOK_SECRET || 'whsec_placeholder',
   webhookEndpoint: '/api/v1/webhooks/stripe',
   idempotency: {
     enabled: true,

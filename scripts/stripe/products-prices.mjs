@@ -3,7 +3,7 @@ import { strict as assert } from 'assert';
 async function checkProductsPrices() {
     console.log('📦 Checking Stripe products and prices...');
 
-    const sk = process.env.STRIPE_SECRET_KEY || 'sk_test_YOUR_STRIPE_SECRET_KEY_HERE';
+    const sk = process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder';
     if (!sk) {
         throw new Error('Defina STRIPE_SECRET_KEY');
     }

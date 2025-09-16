@@ -11,14 +11,34 @@ interface PricingGridProps {
 
 export function PricingGrid({ currentPlan, onPlanSelect }: PricingGridProps) {
   const plans = billingService.getPlans();
-  
+
   // Marca o plano PRO como popular
   const popularPlanCode = 'PRO';
-  
+
   const handlePlanSelect = (planCode: string) => {
     console.log(`Plano selecionado: ${planCode}`);
     onPlanSelect?.(planCode);
   };
+
+  // Transformar features de objeto para array de strings
+  const plansWithFeatures = plans.map((plan: any) => ({
+    ...plan,
+    price_formatted: `R$ ${plan.price_month}`,
+    features: Object.entries(plan.features)
+      .filter(([_, enabled]) => enabled)
+      .map(([feature, _]) => {
+        const featureNames: Record<string, string> = {
+          multi_location: 'Múltiplas localizações',
+          advanced_reporting: 'Relatórios avançados',
+          sms_notifications: 'Notificações SMS',
+          custom_branding: 'Marca personalizada',
+          priority_support: 'Suporte prioritário',
+          webhooks: 'Webhooks',
+          api_access: 'Acesso à API'
+        };
+        return featureNames[feature] || feature;
+      })
+  }));
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -32,7 +52,7 @@ export function PricingGrid({ currentPlan, onPlanSelect }: PricingGridProps) {
       </div>
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-3 lg:gap-6">
-        {plans.map((plan: any) => (
+        {plansWithFeatures.map((plan: any) => (
           <PricingCard
             key={plan.code}
             plan={plan}

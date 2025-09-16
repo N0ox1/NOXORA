@@ -23,8 +23,8 @@ export default function HomePage() {
             </div>
           </div>
         </div>
-        {/* Linha fina separadora com degradê azul */}
-        <div className="h-px bg-gradient-to-r from-blue-500 to-blue-700"></div>
+        {/* Linha separadora com degradê azul */}
+        <div className="h-0.5 bg-gradient-to-r from-blue-400 via-blue-500 to-blue-600"></div>
       </header>
 
       {/* Hero Section */}

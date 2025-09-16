@@ -69,3 +69,4 @@ Configure these alerts in your monitoring system:
 - **Hit ratio baixo**: `cache.hit_ratio < 0.5`
 - **Pool esperando**: `db.pool_wait_count > 0`
 
+

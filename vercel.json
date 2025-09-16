@@ -1,8 +1,10 @@
 {
   "version": 2,
+  "buildCommand": "prisma generate && next build",
   "env": {
     "NODE_ENV": "production"
   },
+  "installCommand": "npm install",
   "functions": {
     "src/app/api/**/*.ts": {
       "maxDuration": 30
@@ -56,13 +58,6 @@
     {
       "source": "/admin/(.*)",
       "destination": "/admin/[path]"
-    }
-  ],
-  "redirects": [
-    {
-      "source": "/",
-      "destination": "/b/barber-labs-centro",
-      "permanent": false
     }
   ]
 }

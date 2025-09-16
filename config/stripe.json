@@ -1,7 +1,7 @@
 {
-  "publishableKey": "pk_test_YOUR_STRIPE_PUBLISHABLE_KEY_HERE",
-  "secretKey": "sk_test_YOUR_STRIPE_SECRET_KEY_HERE",
-  "webhookSecret": "whsec_your_webhook_secret_here",
+  "publishableKey": "pk_test_placeholder",
+  "secretKey": "sk_test_placeholder",
+  "webhookSecret": "whsec_placeholder",
   "webhookEndpoint": "/api/v1/webhooks/stripe",
   "idempotency": {
     "enabled": true,
