@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { toast } from 'react-hot-toast';
 import {
   PlusIcon,
   PencilIcon,
@@ -98,14 +99,19 @@ export default function AdminDashboard() {
       });
       if (response.ok) {
         const data = await response.json();
-        setServices(data.map((s: any) => ({
+        console.log('📋 Dados recebidos da API:', data);
+        const mappedServices = data.map((s: any) => ({
           id: s.id,
           name: s.name,
           duration_min: s.durationMin,
           price_cents: s.priceCents,
           description: '',
           is_active: s.isActive
-        })));
+        }));
+        console.log('🔄 Serviços mapeados:', mappedServices);
+        setServices(mappedServices);
+      } else {
+        console.error('❌ Erro na resposta da API:', response.status, response.statusText);
       }
     } catch (error) {
       console.error('Erro ao carregar serviços:', error);
@@ -193,16 +199,16 @@ export default function AdminDashboard() {
         if (response.ok) {
           // Recarregar serviços do banco
           await loadServices();
-          alert('Serviço criado com sucesso!');
+          toast.success('Serviço criado com sucesso!');
         } else {
           const error = await response.json();
           console.error('Erro detalhado:', error);
           if (error.errors) {
             // Erro de validação Zod
             const errorMessages = Object.values(error.errors).flat();
-            alert(`Erro de validação: ${errorMessages.join(', ')}`);
+            toast.error(`Erro de validação: ${errorMessages.join(', ')}`);
           } else {
-            alert(`Erro ao criar serviço: ${error.message || 'Erro desconhecido'}`);
+            toast.error(`Erro ao criar serviço: ${error.message || 'Erro desconhecido'}`);
           }
         }
       }
@@ -242,14 +248,14 @@ export default function AdminDashboard() {
         if (response.ok) {
           // Recarregar serviços do banco
           await loadServices();
-          alert('Serviço excluído com sucesso!');
+          toast.success('Serviço excluído com sucesso!');
         } else {
           const error = await response.json();
-          alert(`Erro ao excluir serviço: ${error.message || 'Erro desconhecido'}`);
+          toast.error(`Erro ao excluir serviço: ${error.message || 'Erro desconhecido'}`);
         }
       } catch (error) {
         console.error('Erro ao excluir serviço:', error);
-        alert('Erro ao excluir serviço. Tente novamente.');
+        toast.error('Erro ao excluir serviço. Tente novamente.');
       }
     }
   };
