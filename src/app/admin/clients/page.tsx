@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { apiFetch } from '@/lib/http';
+// Removido apiFetch - usando fetch direto
 import { useTenant } from '@/components/tenant/use-tenant';
 import { toast } from 'react-hot-toast';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
@@ -17,17 +17,49 @@ export default function ClientsPage() {
   const [loading, setLoading] = useState(false);
 
   async function load() {
-    const data = await apiFetch('/api/v1/clients', { tenantId });
-    setItems(data);
+    try {
+      console.log('🔄 Carregando clientes...');
+      const response = await fetch('/api/v1/clients', {
+        headers: {
+          'x-tenant-id': tenantId
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('📋 Clientes carregados:', data);
+        setItems(data);
+      } else {
+        console.error('❌ Erro na resposta:', response.status);
+        toast.error('Erro ao carregar clientes');
+      }
+    } catch (error) {
+      console.error('❌ Erro ao carregar clientes:', error);
+      toast.error('Erro ao carregar clientes');
+    }
   }
   useEffect(() => { load(); }, [tenantId]);
 
 
   async function remove(id: string) {
     try {
-      await apiFetch(`/api/v1/clients/${id}`, { tenantId, init: { method: 'DELETE' } });
-      setItems(prev => prev.filter(i => i.id !== id));
-    } catch (e: any) { toast.error(e.message); }
+      const response = await fetch(`/api/v1/clients/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'x-tenant-id': tenantId
+        }
+      });
+      
+      if (response.ok) {
+        setItems(prev => prev.filter(i => i.id !== id));
+        toast.success('Cliente removido com sucesso!');
+      } else {
+        toast.error('Erro ao remover cliente');
+      }
+    } catch (e: any) { 
+      console.error('Erro ao remover cliente:', e);
+      toast.error(e.message); 
+    }
   }
 
   return (
