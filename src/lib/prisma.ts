@@ -32,7 +32,13 @@ if (process.env.NODE_ENV !== 'production') {
 if (process.env.NODE_ENV === 'development') {
   prisma.$on('error', (e) => {
     // Filtrar apenas erros importantes, ignorar "connection closed"
-    if (!e.message?.includes('closed') && !e.message?.includes('Connection terminated')) {
+    const errorMessage = e.message || '';
+    const isConnectionClosed = errorMessage.includes('closed') || 
+                              errorMessage.includes('Connection terminated') ||
+                              errorMessage.includes('Connection closed') ||
+                              errorMessage.includes('kind: Closed');
+    
+    if (!isConnectionClosed) {
       console.warn('Prisma: Erro de conexão detectado:', e.message);
     }
   });
