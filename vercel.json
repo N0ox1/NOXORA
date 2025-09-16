@@ -60,11 +60,5 @@
       "destination": "/admin/[path]"
     }
   ],
-  "redirects": [
-    {
-      "source": "/",
-      "destination": "/b/barber-labs-centro",
-      "permanent": false
-    }
-  ]
+  "redirects": []
 }
