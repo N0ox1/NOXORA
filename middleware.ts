@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 
 const enc = new TextEncoder();
-const JWT_SECRET = enc.encode(process.env.JWT_SECRET || 'dev');
+const JWT_SECRET = enc.encode(process.env.JWT_SECRET || 'noxora-super-secret-jwt-key-2025-development-only-32-chars');
 
 function buildCors() {
   const allow = (process.env.ALLOWED_ORIGINS || '*').trim() || '*';

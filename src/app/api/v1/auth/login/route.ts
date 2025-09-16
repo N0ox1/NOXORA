@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { prisma } from '@/lib/prisma';
 import { verifyPassword } from '@/lib/auth/password';
 import { signAccess, signRefresh } from '@/lib/jwt';
+import { getErrorMessage } from '@/lib/errors/error-messages';
 
 const loginSchema = z.object({
     email: z.string().email(),
@@ -23,16 +24,25 @@ export async function POST(request: NextRequest) {
             });
 
             if (!user) {
-                return NextResponse.json({ error: 'invalid_credentials' }, { status: 401 });
+                return NextResponse.json({
+                    error: 'user_not_found',
+                    message: getErrorMessage('user_not_found')
+                }, { status: 401 });
             }
 
             // Verificar senha
             if (!user.passwordHash) {
-                return NextResponse.json({ error: 'invalid_credentials' }, { status: 401 });
+                return NextResponse.json({
+                    error: 'invalid_password',
+                    message: getErrorMessage('invalid_password')
+                }, { status: 401 });
             }
             const isValid = await verifyPassword(password, user.passwordHash);
             if (!isValid) {
-                return NextResponse.json({ error: 'invalid_credentials' }, { status: 401 });
+                return NextResponse.json({
+                    error: 'invalid_password',
+                    message: getErrorMessage('invalid_password')
+                }, { status: 401 });
             }
 
             // Gerar tokens
@@ -48,6 +58,13 @@ export async function POST(request: NextRequest) {
                 sessionId: randomUUID(),
             });
 
+            console.log('✅ Login realizado com sucesso:', {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                role: user.role
+            });
+
             return NextResponse.json({
                 access_token: accessToken,
                 refresh_token: refreshToken,
@@ -61,37 +78,22 @@ export async function POST(request: NextRequest) {
             });
         } catch (prismaError) {
             console.error('Erro do Prisma no login:', prismaError);
-            // Fallback: sistema de usuários mock para desenvolvimento
-            const mockUsers = [
-                { email: 'admin@test.com', password: 'admin123', name: 'Admin', role: 'ADMIN' },
-                { email: 'user@test.com', password: 'user123', name: 'Usuário', role: 'USER' },
-                { email: 'barber@test.com', password: 'barber123', name: 'Barbeiro', role: 'BARBER' }
-            ];
-
-            const mockUser = mockUsers.find(u => u.email === email && u.password === password);
-
-            if (!mockUser) {
-                return NextResponse.json({ error: 'invalid_credentials' }, { status: 401 });
-            }
-
-            const userId = 'mock-user-' + Date.now();
             return NextResponse.json({
-                access_token: 'mock-token-' + Date.now(),
-                refresh_token: 'mock-refresh-' + Date.now(),
-                tenantId: 'mock-tenant',
-                user: {
-                    id: userId,
-                    email: mockUser.email,
-                    name: mockUser.name,
-                    role: mockUser.role,
-                },
-            });
+                error: 'database_error',
+                message: getErrorMessage('database_error')
+            }, { status: 500 });
         }
     } catch (error) {
         console.error('Erro no login:', error);
         if (error instanceof z.ZodError) {
-            return NextResponse.json({ error: 'invalid_credentials' }, { status: 401 });
+            return NextResponse.json({
+                error: 'validation_error',
+                message: getErrorMessage('validation_error')
+            }, { status: 400 });
         }
-        return NextResponse.json({ error: 'internal_error' }, { status: 500 });
+        return NextResponse.json({
+            error: 'internal_error',
+            message: getErrorMessage('internal_error')
+        }, { status: 500 });
     }
 }

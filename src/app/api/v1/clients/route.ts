@@ -13,6 +13,28 @@ const ClientCreateSchema = strict({
     notes: z.string().optional().transform((s) => s?.trim())
 });
 
+export async function GET(req: NextRequest) {
+    try {
+        const tenantId = ensureTenant(req);
+        const clients = await prisma.client.findMany({
+            where: { tenantId },
+            select: {
+                id: true,
+                name: true,
+                phone: true,
+                email: true,
+                notes: true,
+                createdAt: true
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+        return NextResponse.json(clients);
+    } catch (err) {
+        console.error('Erro ao listar clientes:', err);
+        return NextResponse.json({ code: 'internal_error', message: 'Erro ao listar clientes' }, { status: 500 });
+    }
+}
+
 export async function POST(req: NextRequest) {
     try {
         const tenantId = ensureTenant(req);

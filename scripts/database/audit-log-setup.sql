@@ -272,3 +272,4 @@ FOR EACH ROW EXECUTE FUNCTION t_appointments_audit();
 
 
 
+

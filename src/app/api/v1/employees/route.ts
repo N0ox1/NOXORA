@@ -8,7 +8,34 @@ import { employeeCreate } from '@/lib/validation/schemas';
 import { createAuditLogger } from '@/lib/audit/api-audit';
 import { prisma } from '@/lib/prisma';
 
-export const { POST } = api({
+export const { GET, POST } = api({
+    GET: async (req: NextRequest) => {
+        try {
+            const tenantId = req.headers.get('x-tenant-id');
+            if (!tenantId) {
+                return NextResponse.json({ code: 'unauthorized', message: 'Tenant ID obrigatório' }, { status: 401 });
+            }
+
+            const employees = await prisma.employee.findMany({
+                where: { tenantId },
+                select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    phone: true,
+                    role: true,
+                    active: true,
+                    createdAt: true
+                },
+                orderBy: { createdAt: 'desc' }
+            });
+
+            return NextResponse.json(employees);
+        } catch (err) {
+            console.error('Erro ao listar funcionários:', err);
+            return NextResponse.json({ code: 'internal_error', message: 'Erro ao listar funcionários' }, { status: 500 });
+        }
+    },
     POST: async (req: NextRequest) => {
         try {
             // Validate headers first

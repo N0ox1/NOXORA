@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { apiFetch } from '@/lib/http';
 import { useTenant } from '@/components/tenant/use-tenant';
 import { toast } from 'react-hot-toast';
@@ -9,60 +10,85 @@ import { Input } from '@/components/ui/input';
 
 interface Client { id: string; name: string; phone: string }
 
-export default function ClientsPage(){
-  const { tenantId } = useTenant('TENANT_TEST');
+export default function ClientsPage() {
+  const router = useRouter();
+  const { tenantId } = useTenant('cmffwm0j20000uaoo2c4ugtvx');
   const [items, setItems] = useState<Client[]>([]);
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
 
-  async function load(){
-    const data = await apiFetch('/api/clients', { tenantId });
+  async function load() {
+    const data = await apiFetch('/api/v1/clients', { tenantId });
     setItems(data);
   }
-  useEffect(()=>{ load(); },[tenantId]);
+  useEffect(() => { load(); }, [tenantId]);
 
-  async function create(){
-    if(!name || !phone) return toast.error('Nome e telefone');
-    setLoading(true);
-    try{
-      await apiFetch('/api/clients', { tenantId, init:{ method:'POST', body: JSON.stringify({ name, phone }) }});
-      setName(''); setPhone('');
-      await load();
-      toast.success('Cliente criado');
-    }catch(e:any){ toast.error(e.message); }
-    finally{ setLoading(false); }
-  }
 
-  async function remove(id:string){
-    try{
-      await apiFetch(`/api/clients?id=${id}`, { tenantId, init:{ method:'DELETE' }});
-      setItems(prev=>prev.filter(i=>i.id!==id));
-    }catch(e:any){ toast.error(e.message); }
+  async function remove(id: string) {
+    try {
+      await apiFetch(`/api/v1/clients/${id}`, { tenantId, init: { method: 'DELETE' } });
+      setItems(prev => prev.filter(i => i.id !== id));
+    } catch (e: any) { toast.error(e.message); }
   }
 
   return (
-    <Card>
-      <CardHeader><CardTitle>Clientes</CardTitle></CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex gap-2">
-          <Input placeholder="Nome" value={name} onChange={e=>setName(e.target.value)} />
-          <Input placeholder="Telefone" value={phone} onChange={e=>setPhone(e.target.value)} />
-          <Button onClick={create} disabled={loading}>{loading?'Criando...':'Criar'}</Button>
-        </div>
-        <div className="divide-y border rounded">
-          {items.map(c=> (
-            <div key={c.id} className="flex items-center justify-between p-3">
-              <div>
-                <div className="font-medium">{c.name}</div>
-                <div className="text-sm text-muted-foreground">{c.phone}</div>
-              </div>
-              <Button variant="destructive" onClick={()=>remove(c.id)}>Excluir</Button>
+    <div className="min-h-screen bg-gray-50">
+      {/* Header com navegação */}
+      <div className="bg-white shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center space-x-4">
+            <Button
+              variant="outline"
+              onClick={() => router.push('/dashboard')}
+              className="flex items-center space-x-2"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              <span>Voltar ao Dashboard</span>
+            </Button>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Clientes</h1>
+              <p className="text-sm text-gray-600">Gerencie os clientes da barbearia</p>
             </div>
-          ))}
+          </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <Card>
+          <CardHeader>
+            <CardTitle>Clientes Cadastrados</CardTitle>
+            <p className="text-sm text-gray-600 mt-2">
+              Os clientes são cadastrados automaticamente quando fazem agendamentos na página pública da barbearia.
+            </p>
+            <div className="mt-4">
+              <Button
+                onClick={() => window.open('/b/default-barbershop', '_blank')}
+                className="bg-green-600 hover:bg-green-700 text-white"
+              >
+                <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+                Ver Página Pública da Barbearia
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="divide-y border rounded">
+              {items.map(c => (
+                <div key={c.id} className="flex items-center justify-between p-3">
+                  <div>
+                    <div className="font-medium">{c.name}</div>
+                    <div className="text-sm text-muted-foreground">{c.phone}</div>
+                  </div>
+                  <Button variant="destructive" onClick={() => remove(c.id)}>Excluir</Button>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
   );
 }
 

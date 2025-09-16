@@ -14,6 +14,28 @@ const ServiceCreateSchema = strict({
     isActive: z.boolean().optional()
 });
 
+export async function GET(req: NextRequest) {
+    try {
+        const tenantId = ensureTenant(req);
+        const services = await prisma.service.findMany({
+            where: { tenantId },
+            select: {
+                id: true,
+                name: true,
+                durationMin: true,
+                priceCents: true,
+                isActive: true,
+                createdAt: true
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+        return NextResponse.json(services);
+    } catch (err) {
+        console.error('Erro ao listar serviços:', err);
+        return NextResponse.json({ code: 'internal_error', message: 'Erro ao listar serviços' }, { status: 500 });
+    }
+}
+
 export async function POST(req: NextRequest) {
     try {
         const tenantId = ensureTenant(req);

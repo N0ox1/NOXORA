@@ -3,7 +3,7 @@ import { randomUUID, createHash } from 'node:crypto';
 import prisma from '@/lib/prisma';
 
 const ALG = 'HS256';
-const secret = () => new TextEncoder().encode(process.env.JWT_SECRET || '');
+const secret = () => new TextEncoder().encode(process.env.JWT_SECRET || 'noxora-super-secret-jwt-key-2025-development-only-32-chars');
 
 export type AccessClaims = { sub: string; tenantId: string; role: string; jti: string } & JWTPayload;
 export type RefreshClaims = { sub: string; tenantId: string; sessionId: string; jti: string } & JWTPayload;

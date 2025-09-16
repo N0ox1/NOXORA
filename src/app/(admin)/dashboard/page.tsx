@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { 
-  PlusIcon, 
-  PencilIcon, 
-  TrashIcon, 
+import {
+  PlusIcon,
+  PencilIcon,
+  TrashIcon,
   CalendarDaysIcon,
   UserGroupIcon,
   CogIcon,
@@ -45,13 +45,13 @@ export default function AdminDashboard() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  
+
   // Estados para modais
   const [showServiceModal, setShowServiceModal] = useState(false);
   const [showEmployeeModal, setShowEmployeeModal] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
-  
+
   // Estados para formulários
   const [serviceForm, setServiceForm] = useState({
     name: '',
@@ -60,7 +60,7 @@ export default function AdminDashboard() {
     description: '',
     is_active: true
   });
-  
+
   const [employeeForm, setEmployeeForm] = useState({
     name: '',
     role: 'BARBER',
@@ -146,11 +146,11 @@ export default function AdminDashboard() {
   // Handlers para Services
   const handleServiceSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (editingService) {
       // Editar serviço existente
-      setServices(prev => prev.map(s => 
-        s.id === editingService.id 
+      setServices(prev => prev.map(s =>
+        s.id === editingService.id
           ? { ...serviceForm, id: editingService.id }
           : s
       ));
@@ -162,7 +162,7 @@ export default function AdminDashboard() {
       };
       setServices(prev => [...prev, newService]);
     }
-    
+
     setShowServiceModal(false);
     setEditingService(null);
     setServiceForm({ name: '', duration_min: 30, price_cents: 0, description: '', is_active: true });
@@ -189,11 +189,11 @@ export default function AdminDashboard() {
   // Handlers para Employees
   const handleEmployeeSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (editingEmployee) {
       // Editar funcionário existente
-      setEmployees(prev => prev.map(e => 
-        e.id === editingEmployee.id 
+      setEmployees(prev => prev.map(e =>
+        e.id === editingEmployee.id
           ? { ...employeeForm, id: editingEmployee.id }
           : e
       ));
@@ -205,7 +205,7 @@ export default function AdminDashboard() {
       };
       setEmployees(prev => [...prev, newEmployee]);
     }
-    
+
     setShowEmployeeModal(false);
     setEditingEmployee(null);
     setEmployeeForm({ name: '', role: 'BARBER', email: '', phone: '', active: true });
@@ -241,9 +241,9 @@ export default function AdminDashboard() {
   };
 
   const formatTime = (timeString: string) => {
-    return new Date(timeString).toLocaleTimeString('pt-BR', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
+    return new Date(timeString).toLocaleTimeString('pt-BR', {
+      hour: '2-digit',
+      minute: '2-digit'
     });
   };
 
@@ -278,6 +278,15 @@ export default function AdminDashboard() {
               <p className="text-gray-600 mt-1">Gerencie sua barbearia</p>
             </div>
             <div className="flex items-center space-x-4">
+              <button
+                onClick={() => window.location.href = '/agenda'}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span>Agenda</span>
+              </button>
               <span className="text-sm text-gray-500">Barber Labs Centro</span>
             </div>
           </div>
@@ -290,33 +299,30 @@ export default function AdminDashboard() {
           <nav className="-mb-px flex space-x-8">
             <button
               onClick={() => setActiveTab('services')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'services'
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'services'
                   ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+                }`}
             >
               <CogIcon className="h-5 w-5 inline mr-2" />
               Serviços
             </button>
             <button
               onClick={() => setActiveTab('employees')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'employees'
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'employees'
                   ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+                }`}
             >
               <UserGroupIcon className="h-5 w-5 inline mr-2" />
               Funcionários
             </button>
             <button
               onClick={() => setActiveTab('agenda')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'agenda'
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'agenda'
                   ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+                }`}
             >
               <CalendarDaysIcon className="h-5 w-5 inline mr-2" />
               Agenda
@@ -377,11 +383,10 @@ export default function AdminDashboard() {
                         {formatPrice(service.price_cents)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          service.is_active 
-                            ? 'bg-green-100 text-green-800' 
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${service.is_active
+                            ? 'bg-green-100 text-green-800'
                             : 'bg-red-100 text-red-800'
-                        }`}>
+                          }`}>
                           {service.is_active ? 'Ativo' : 'Inativo'}
                         </span>
                       </td>
@@ -462,11 +467,10 @@ export default function AdminDashboard() {
                         <div className="text-sm text-gray-500">{employee.phone}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          employee.active 
-                            ? 'bg-green-100 text-green-800' 
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${employee.active
+                            ? 'bg-green-100 text-green-800'
                             : 'bg-red-100 text-red-800'
-                        }`}>
+                          }`}>
                           {employee.active ? 'Ativo' : 'Inativo'}
                         </span>
                       </td>

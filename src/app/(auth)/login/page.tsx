@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { getErrorMessage, isCredentialError, isValidationError, isSystemError } from '@/lib/errors/error-messages';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -35,7 +36,9 @@ export default function LoginPage() {
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || 'Erro durante o login');
+        // Usar a mensagem da API se disponível, senão usar o código de erro
+        const errorMessage = result.message || getErrorMessage(result.error || 'internal_error');
+        throw new Error(errorMessage);
       }
 
       // Login bem-sucedido
@@ -44,8 +47,9 @@ export default function LoginPage() {
 
     } catch (error) {
       console.error('Erro no login:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Erro durante o login';
       setErrors({
-        submit: error instanceof Error ? error.message : 'Erro durante o login'
+        submit: errorMessage
       });
     } finally {
       setIsLoading(false);
@@ -117,8 +121,22 @@ export default function LoginPage() {
             </div>
 
             {errors.submit && (
-              <div className="text-red-600 text-sm text-center">
-                {errors.submit}
+              <div className="rounded-md bg-red-50 p-4 border border-red-200">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <h3 className="text-sm font-medium text-red-800">
+                      Erro no login
+                    </h3>
+                    <div className="mt-2 text-sm text-red-700">
+                      <p>{errors.submit}</p>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
