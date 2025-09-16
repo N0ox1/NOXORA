@@ -53,7 +53,8 @@ export default function RegisterPage() {
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || 'Erro durante o registro');
+        console.error('Erro na API de registro:', result);
+        throw new Error(result.message || result.error || 'Erro durante o registro');
       }
 
       // Registro bem-sucedido
