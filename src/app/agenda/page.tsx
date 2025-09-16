@@ -37,8 +37,8 @@ export default function AgendaPage() {
   const [filterEmp, setFilterEmp] = useState<string>('all');
   const [filterSvc, setFilterSvc] = useState<string>('all');
 
-  async function loadServices() { 
-    try { 
+  async function loadServices() {
+    try {
       const response = await fetch('/api/v1/services', {
         headers: { 'x-tenant-id': tenantId }
       });
@@ -75,7 +75,7 @@ export default function AgendaPage() {
           notes: `Cliente: ${cliName}, Telefone: ${cliPhone}`
         })
       });
-      
+
       if (!response.ok) {
         throw new Error('Erro ao criar agendamento');
       }
@@ -95,7 +95,7 @@ export default function AgendaPage() {
       const response = await fetch(`/api/v1/appointments/list?${qs.toString()}`, {
         headers: { 'x-tenant-id': tenantId }
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         setItems(data.items || []);
@@ -105,7 +105,7 @@ export default function AgendaPage() {
     } catch (e: any) { toast.error(e.message || 'Falha ao carregar'); }
   }
   async function loadEmployees() {
-    try { 
+    try {
       const response = await fetch('/api/v1/employees', {
         headers: { 'x-tenant-id': tenantId }
       });
@@ -133,7 +133,7 @@ export default function AgendaPage() {
         },
         body: JSON.stringify({ id, status: 'CANCELED' })
       });
-      
+
       if (!response.ok) {
         throw new Error('Erro ao cancelar agendamento');
       }

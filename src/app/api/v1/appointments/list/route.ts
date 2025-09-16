@@ -42,11 +42,20 @@ export const { GET } = api({
                 where.serviceId = serviceId;
             }
 
-            // For now, return empty array since we don't have appointments in the database yet
-            // This prevents the 442 error
+            // Buscar agendamentos do banco
+            const appointments = await prisma.appointment.findMany({
+                where,
+                include: {
+                    client: { select: { name: true, phone: true } },
+                    employee: { select: { name: true } },
+                    service: { select: { name: true, durationMin: true } }
+                },
+                orderBy: { scheduledAt: 'asc' }
+            });
+
             return NextResponse.json({
-                items: [],
-                total: 0,
+                items: appointments,
+                total: appointments.length,
                 page: 1,
                 limit: 20
             }, { status: 200 });
