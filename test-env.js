@@ -5,11 +5,9 @@ console.log('DATABASE_URL:', process.env.DATABASE_URL ? '✅ Presente' : '❌ Au
 console.log('JWT_SECRET:', process.env.JWT_SECRET ? '✅ Presente' : '❌ Ausente');
 
 if (process.env.DATABASE_URL) {
-  console.log('DATABASE_URL length:', process.env.DATABASE_URL.length);
-  console.log('DATABASE_URL starts with:', process.env.DATABASE_URL.substring(0, 20) + '...');
+  console.log('DATABASE_URL: ✅ Configurado');
 }
 
 if (process.env.JWT_SECRET) {
-  console.log('JWT_SECRET length:', process.env.JWT_SECRET.length);
-  console.log('JWT_SECRET starts with:', process.env.JWT_SECRET.substring(0, 10) + '...');
+  console.log('JWT_SECRET: ✅ Configurado');
 }

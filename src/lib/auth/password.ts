@@ -1,6 +1,14 @@
 import bcrypt from 'bcryptjs';
 import { logger } from '@/lib/logger';
+import { randomBytes } from 'crypto';
 // import { AUTH_CONFIG } from './jwt'; // Removido - não existe
+
+// Função auxiliar para gerar números aleatórios criptograficamente seguros
+function secureRandom(max: number): number {
+  const bytes = randomBytes(4);
+  const randomValue = bytes.readUInt32BE(0);
+  return randomValue % max;
+}
 
 // Função para hash de senha
 export async function hashPassword(password: string): Promise<string> {
@@ -144,24 +152,26 @@ export function generateRandomPassword(length: number = 12): string {
   let password = '';
 
   // Garantir pelo menos um de cada tipo
-  password += charset.uppercase[Math.floor(Math.random() * charset.uppercase.length)];
-  password += charset.lowercase[Math.floor(Math.random() * charset.lowercase.length)];
-  password += charset.numbers[Math.floor(Math.random() * charset.numbers.length)];
-  password += charset.symbols[Math.floor(Math.random() * charset.symbols.length)];
+  password += charset.uppercase[secureRandom(charset.uppercase.length)];
+  password += charset.lowercase[secureRandom(charset.lowercase.length)];
+  password += charset.numbers[secureRandom(charset.numbers.length)];
+  password += charset.symbols[secureRandom(charset.symbols.length)];
 
   // Preencher o resto aleatoriamente
   const remainingLength = length - 4;
   const allChars = charset.uppercase + charset.lowercase + charset.numbers + charset.symbols;
 
   for (let i = 0; i < remainingLength; i++) {
-    password += allChars[Math.floor(Math.random() * allChars.length)];
+    password += allChars[secureRandom(allChars.length)];
   }
 
-  // Embaralhar a senha
-  return password
-    .split('')
-    .sort(() => Math.random() - 0.5)
-    .join('');
+  // Embaralhar a senha usando Fisher-Yates shuffle
+  const chars = password.split('');
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = secureRandom(i + 1);
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+  return chars.join('');
 }
 
 // Função para validar força da senha com feedback detalhado

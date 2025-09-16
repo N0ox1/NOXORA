@@ -68,7 +68,9 @@ class MockRedis {
   }
 
   async keys(pattern: string): Promise<string[]> {
-    const rx = new RegExp('^' + pattern.replace('*', '.*') + '$');
+    // Escapar caracteres especiais do regex para evitar injection
+    const escapedPattern = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+    const rx = new RegExp('^' + escapedPattern + '$');
     return Object.keys(this.s).filter(k => rx.test(k));
   }
 

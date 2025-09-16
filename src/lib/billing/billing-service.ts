@@ -1,5 +1,6 @@
 import { BillingConfig, BillingPlan, BillingAddon, TenantUsage, BillingEnforcementResult, BillingCheckoutRequest, BillingCheckoutResponse } from '@/types/billing';
 import { TenantService } from '@/lib/tenant';
+import { randomBytes } from 'crypto';
 
 // Carregar configuração de billing
 import billingConfigData from '../../../config/billing.json';
@@ -304,8 +305,9 @@ export class BillingService {
         ? this.calculateMonthlyPrice(request.plan_code, request.addons)
         : this.calculateYearlyPrice(request.plan_code, request.addons);
 
-      // Gerar IDs mock
-      const sessionId = `cs_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      // Gerar IDs mock usando crypto seguro
+      const randomSuffix = randomBytes(6).toString('hex');
+      const sessionId = `cs_${Date.now()}_${randomSuffix}`;
       const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutos
 
       // Em produção, aqui seria criada uma sessão real no Stripe

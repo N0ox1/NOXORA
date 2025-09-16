@@ -124,9 +124,11 @@ export class CacheService {
             return TTL_MATRIX[route as keyof typeof TTL_MATRIX];
         }
 
-        // Buscar por padrão
+        // Buscar por padrão - escapar caracteres especiais
         for (const [pattern, ttl] of Object.entries(TTL_MATRIX)) {
-            if (route.includes(pattern.replace('*', ''))) {
+            const escapedPattern = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+            const regex = new RegExp(escapedPattern);
+            if (regex.test(route)) {
                 return ttl;
             }
         }
