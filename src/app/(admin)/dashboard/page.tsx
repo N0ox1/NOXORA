@@ -81,109 +81,132 @@ export default function AdminDashboard() {
     active: true
   });
 
-  // Mock data para desenvolvimento
+  // Carregar dados reais do banco
   useEffect(() => {
-    const mockServices: Service[] = [
-      {
-        id: 'srv_1',
-        name: 'Corte Masculino',
-        duration_min: 30,
-        price_cents: 4500,
-        description: 'Corte tradicional masculino com acabamento perfeito',
-        is_active: true
-      },
-      {
-        id: 'srv_2',
-        name: 'Barba',
-        duration_min: 20,
-        price_cents: 2500,
-        description: 'Acabamento de barba com navalha',
-        is_active: true
-      },
-      {
-        id: 'srv_3',
-        name: 'Corte + Barba',
-        duration_min: 45,
-        price_cents: 6500,
-        description: 'Combo completo de corte e barba',
-        is_active: true
-      }
-    ];
-
-    const mockEmployees: Employee[] = [
-      {
-        id: 'emp_1',
-        name: 'Rafa',
-        role: 'BARBER',
-        email: 'rafa@barberlabs.com',
-        phone: '+55 11 90000-0001',
-        active: true
-      },
-      {
-        id: 'emp_2',
-        name: 'João',
-        role: 'BARBER',
-        email: 'joao@barberlabs.com',
-        phone: '+55 11 90000-0002',
-        active: true
-      }
-    ];
-
-    const mockAppointments: Appointment[] = [
-      {
-        id: 'apt_1',
-        client_name: 'João Silva',
-        service_name: 'Corte Masculino',
-        employee_name: 'Rafa',
-        start_at: '2024-12-16T14:00:00',
-        duration_min: 30,
-        status: 'CONFIRMED'
-      },
-      {
-        id: 'apt_2',
-        client_name: 'Pedro Santos',
-        service_name: 'Barba',
-        employee_name: 'João',
-        start_at: '2024-12-16T15:00:00',
-        duration_min: 20,
-        status: 'PENDING'
-      }
-    ];
-
-    setServices(mockServices);
-    setEmployees(mockEmployees);
-    setAppointments(mockAppointments);
+    loadServices();
+    loadEmployees();
+    loadAppointments();
   }, []);
 
+  // Funções para carregar dados reais
+  const loadServices = async () => {
+    try {
+      const response = await fetch('/api/v1/services', {
+        headers: {
+          'x-tenant-id': 'cmffwm0j20000uaoo2c4ugtvx' // Tenant ID fixo para desenvolvimento
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setServices(data.map((s: any) => ({
+          id: s.id,
+          name: s.name,
+          duration_min: s.durationMin,
+          price_cents: s.priceCents,
+          description: '',
+          is_active: s.isActive
+        })));
+      }
+    } catch (error) {
+      console.error('Erro ao carregar serviços:', error);
+    }
+  };
+
+  const loadEmployees = async () => {
+    try {
+      const response = await fetch('/api/v1/employees', {
+        headers: {
+          'x-tenant-id': 'cmffwm0j20000uaoo2c4ugtvx'
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setEmployees(data.map((e: any) => ({
+          id: e.id,
+          name: e.name,
+          role: e.role,
+          email: e.email,
+          phone: e.phone,
+          active: e.active
+        })));
+      }
+    } catch (error) {
+      console.error('Erro ao carregar funcionários:', error);
+    }
+  };
+
+  const loadAppointments = async () => {
+    try {
+      const response = await fetch('/api/v1/appointments/list', {
+        headers: {
+          'x-tenant-id': 'cmffwm0j20000uaoo2c4ugtvx'
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setAppointments(data.items?.map((a: any) => ({
+          id: a.id,
+          client_name: a.client?.name || 'Cliente',
+          service_name: a.service?.name || 'Serviço',
+          employee_name: a.employee?.name || 'Funcionário',
+          start_at: a.startAt,
+          duration_min: 30,
+          status: a.status
+        })) || []);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar agendamentos:', error);
+    }
+  };
+
   // Handlers para Services
-  const handleServiceSubmit = (e: React.FormEvent) => {
+  const handleServiceSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Garantir que price_cents está atualizado
-    const updatedServiceForm = {
-      ...serviceForm,
-      price_cents: reaisToCents(serviceForm.price_reais)
-    };
-
-    if (editingService) {
-      // Editar serviço existente
-      setServices(prev => prev.map(s =>
-        s.id === editingService.id
-          ? { ...updatedServiceForm, id: editingService.id }
-          : s
-      ));
-    } else {
-      // Criar novo serviço
-      const newService: Service = {
-        ...updatedServiceForm,
-        id: `srv_${Date.now()}`
+    try {
+      // Garantir que price_cents está atualizado
+      const updatedServiceForm = {
+        ...serviceForm,
+        price_cents: reaisToCents(serviceForm.price_reais)
       };
-      setServices(prev => [...prev, newService]);
-    }
 
-    setShowServiceModal(false);
-    setEditingService(null);
-    setServiceForm({ name: '', duration_min: 30, price_cents: 0, price_reais: '0,00', description: '', is_active: true });
+      if (editingService) {
+        // TODO: Implementar edição de serviço via API
+        console.log('Edição de serviço não implementada ainda');
+      } else {
+        // Criar novo serviço no banco
+        const response = await fetch('/api/v1/services', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-tenant-id': 'cmffwm0j20000uaoo2c4ugtvx'
+          },
+          body: JSON.stringify({
+            barbershopId: 'shop_1', // ID fixo para desenvolvimento
+            name: updatedServiceForm.name,
+            durationMin: updatedServiceForm.duration_min,
+            priceCents: updatedServiceForm.price_cents,
+            isActive: updatedServiceForm.is_active
+          })
+        });
+
+        if (response.ok) {
+          // Recarregar serviços do banco
+          await loadServices();
+          alert('Serviço criado com sucesso!');
+        } else {
+          const error = await response.json();
+          alert(`Erro ao criar serviço: ${error.message || 'Erro desconhecido'}`);
+        }
+      }
+
+      setShowServiceModal(false);
+      setEditingService(null);
+      setServiceForm({ name: '', duration_min: 30, price_cents: 0, price_reais: '0,00', description: '', is_active: true });
+    } catch (error) {
+      console.error('Erro ao salvar serviço:', error);
+      alert('Erro ao salvar serviço. Tente novamente.');
+    }
   };
 
   const handleEditService = (service: Service) => {
@@ -199,9 +222,28 @@ export default function AdminDashboard() {
     setShowServiceModal(true);
   };
 
-  const handleDeleteService = (serviceId: string) => {
+  const handleDeleteService = async (serviceId: string) => {
     if (confirm('Tem certeza que deseja excluir este serviço?')) {
-      setServices(prev => prev.filter(s => s.id !== serviceId));
+      try {
+        const response = await fetch(`/api/v1/services?id=${serviceId}`, {
+          method: 'DELETE',
+          headers: {
+            'x-tenant-id': 'cmffwm0j20000uaoo2c4ugtvx'
+          }
+        });
+
+        if (response.ok) {
+          // Recarregar serviços do banco
+          await loadServices();
+          alert('Serviço excluído com sucesso!');
+        } else {
+          const error = await response.json();
+          alert(`Erro ao excluir serviço: ${error.message || 'Erro desconhecido'}`);
+        }
+      } catch (error) {
+        console.error('Erro ao excluir serviço:', error);
+        alert('Erro ao excluir serviço. Tente novamente.');
+      }
     }
   };
 

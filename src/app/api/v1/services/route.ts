@@ -50,3 +50,37 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ code: 'internal_error' }, { status: 500 });
     }
 }
+
+export async function DELETE(req: NextRequest) {
+    try {
+        const tenantId = ensureTenant(req);
+        const { searchParams } = new URL(req.url);
+        const serviceId = searchParams.get('id');
+        
+        if (!serviceId) {
+            return NextResponse.json({ code: 'validation_error', message: 'ID do serviço é obrigatório' }, { status: 400 });
+        }
+
+        // Verificar se o serviço existe e pertence ao tenant
+        const existingService = await prisma.service.findFirst({
+            where: { id: serviceId, tenantId }
+        });
+
+        if (!existingService) {
+            return NextResponse.json({ code: 'not_found', message: 'Serviço não encontrado' }, { status: 404 });
+        }
+
+        // Deletar o serviço
+        await prisma.service.delete({
+            where: { id: serviceId }
+        });
+
+        const { requestId, ip } = getRequestMeta(req as any);
+        await audit({ tenantId, userId: req.headers.get('x-user-id') || 'system', entity: 'service', entityId: serviceId, op: 'DELETE', before: existingService, after: null, requestId, ip });
+
+        return NextResponse.json({ ok: true, message: 'Serviço excluído com sucesso' }, { status: 200 });
+    } catch (err) {
+        console.error('Erro ao excluir serviço:', err);
+        return NextResponse.json({ code: 'internal_error', message: 'Erro ao excluir serviço' }, { status: 500 });
+    }
+}
