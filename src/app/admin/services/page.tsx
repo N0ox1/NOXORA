@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 
 interface Service { id: string; name: string; durationMin: number; priceCents: number }
 
-export default function ServicesPage(){
+export default function ServicesPage() {
   const { tenantId } = useTenant('TENANT_TEST');
   const [items, setItems] = useState<Service[]>([]);
   const [name, setName] = useState('');
@@ -29,31 +29,31 @@ export default function ServicesPage(){
     return (cents / 100).toFixed(2).replace('.', ',');
   };
 
-  async function load(){
+  async function load() {
     const data = await apiFetch('/api/services', { tenantId });
     setItems(data);
   }
-  useEffect(()=>{ load(); },[tenantId]);
+  useEffect(() => { load(); }, [tenantId]);
 
-  async function create(){
-    if(!name) return toast.error('Nome obrigatório');
+  async function create() {
+    if (!name) return toast.error('Nome obrigatório');
     setLoading(true);
-    try{
+    try {
       const priceCents = reaisToCents(priceReais);
-      await apiFetch('/api/services', { tenantId, init:{ method:'POST', body: JSON.stringify({ barbershopId:'shop_1', name, durationMin, priceCents }) }});
+      await apiFetch('/api/services', { tenantId, init: { method: 'POST', body: JSON.stringify({ barbershopId: 'shop_1', name, durationMin, priceCents }) } });
       setName('');
       setPriceReais('50,00');
       await load();
       toast.success('Serviço criado');
-    }catch(e:any){ toast.error(e.message); }
-    finally{ setLoading(false); }
+    } catch (e: any) { toast.error(e.message); }
+    finally { setLoading(false); }
   }
 
-  async function remove(id:string){
-    try{
-      await apiFetch(`/api/services?id=${id}`, { tenantId, init:{ method:'DELETE' }});
-      setItems(prev=>prev.filter(i=>i.id!==id));
-    }catch(e:any){ toast.error(e.message); }
+  async function remove(id: string) {
+    try {
+      await apiFetch(`/api/services?id=${id}`, { tenantId, init: { method: 'DELETE' } });
+      setItems(prev => prev.filter(i => i.id !== id));
+    } catch (e: any) { toast.error(e.message); }
   }
 
   return (
@@ -61,19 +61,19 @@ export default function ServicesPage(){
       <CardHeader><CardTitle>Serviços</CardTitle></CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-          <Input placeholder="Nome" value={name} onChange={e=>setName(e.target.value)} />
-          <Input type="number" placeholder="Duração (min)" value={durationMin || ''} onChange={e=>setDurationMin(Number(e.target.value) || 0)} />
-          <Input placeholder="Preço (R$)" value={priceReais} onChange={e=>setPriceReais(e.target.value)} />
-          <Button onClick={create} disabled={loading}>{loading?'Criando...':'Criar'}</Button>
+          <Input placeholder="Nome" value={name} onChange={e => setName(e.target.value)} />
+          <Input type="number" placeholder="Duração (min)" value={durationMin || ''} onChange={e => setDurationMin(Number(e.target.value) || 0)} />
+          <Input placeholder="Preço (R$)" value={priceReais} onChange={e => setPriceReais(e.target.value)} />
+          <Button onClick={create} disabled={loading}>{loading ? 'Criando...' : 'Criar'}</Button>
         </div>
         <div className="divide-y border rounded">
-          {items.map(s=> (
+          {items.map(s => (
             <div key={s.id} className="flex items-center justify-between p-3">
               <div>
                 <div className="font-medium">{s.name}</div>
                 <div className="text-sm text-muted-foreground">{s.durationMin} min · R$ {centsToReais(s.priceCents)}</div>
               </div>
-              <Button variant="destructive" onClick={()=>remove(s.id)}>Excluir</Button>
+              <Button variant="destructive" onClick={() => remove(s.id)}>Excluir</Button>
             </div>
           ))}
         </div>

@@ -319,8 +319,8 @@ export default function AdminDashboard() {
             <button
               onClick={() => setActiveTab('services')}
               className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'services'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
             >
               <CogIcon className="h-5 w-5 inline mr-2" />
@@ -329,8 +329,8 @@ export default function AdminDashboard() {
             <button
               onClick={() => setActiveTab('employees')}
               className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'employees'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
             >
               <UserGroupIcon className="h-5 w-5 inline mr-2" />
@@ -339,8 +339,8 @@ export default function AdminDashboard() {
             <button
               onClick={() => setActiveTab('agenda')}
               className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'agenda'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
             >
               <CalendarDaysIcon className="h-5 w-5 inline mr-2" />
@@ -403,8 +403,8 @@ export default function AdminDashboard() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${service.is_active
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-red-100 text-red-800'
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-red-100 text-red-800'
                           }`}>
                           {service.is_active ? 'Ativo' : 'Inativo'}
                         </span>
@@ -487,8 +487,8 @@ export default function AdminDashboard() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${employee.active
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-red-100 text-red-800'
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-red-100 text-red-800'
                           }`}>
                           {employee.active ? 'Ativo' : 'Inativo'}
                         </span>
@@ -634,8 +634,8 @@ export default function AdminDashboard() {
                     value={serviceForm.price_reais}
                     onChange={(e) => {
                       const value = e.target.value;
-                      setServiceForm(prev => ({ 
-                        ...prev, 
+                      setServiceForm(prev => ({
+                        ...prev,
                         price_reais: value,
                         price_cents: reaisToCents(value)
                       }));
