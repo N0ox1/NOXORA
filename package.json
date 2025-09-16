@@ -14,7 +14,7 @@
     "test:public:availability": "pwsh ./scripts/test_public_availability.ps1",
     "dev": "next dev",
     "dev:check": "node scripts/sync-check.mjs && next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
     "sync:check": "node scripts/sync-check.mjs",
