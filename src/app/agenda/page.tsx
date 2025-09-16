@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { apiFetch } from '@/lib/http';
+// Removido apiFetch - usando fetch direto
 import { useTenant } from '@/components/tenant/use-tenant';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -37,7 +37,19 @@ export default function AgendaPage() {
   const [filterEmp, setFilterEmp] = useState<string>('all');
   const [filterSvc, setFilterSvc] = useState<string>('all');
 
-  async function loadServices() { try { const data = await apiFetch('/api/v1/services', { tenantId }); setSvcs(data); } catch { } }
+  async function loadServices() { 
+    try { 
+      const response = await fetch('/api/v1/services', {
+        headers: { 'x-tenant-id': tenantId }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setSvcs(data);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar serviços:', error);
+    }
+  }
   useEffect(() => { loadServices(); }, [tenantId]);
 
   async function createAppt() {
@@ -48,19 +60,25 @@ export default function AgendaPage() {
       start.setUTCHours(9, 0, 0, 0); // padrão 09:00
       const end = new Date(start);
       end.setUTCMinutes((sel?.durationMin ?? 60));
-      await apiFetch('/api/v1/appointments', {
-        tenantId,
-        init: {
-          method: 'POST', body: JSON.stringify({
-            barbershopId: 'cmffwm0ks0002uaoot2x03802', // ID real da barbershop
-            serviceId: svc,
-            employeeId: emp,
-            clientId: 'client-' + Date.now(), // Gerar ID temporário
-            scheduledAt: start.toISOString(),
-            notes: `Cliente: ${cliName}, Telefone: ${cliPhone}`
-          })
-        }
+      const response = await fetch('/api/v1/appointments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-id': tenantId
+        },
+        body: JSON.stringify({
+          barbershopId: 'cmffwm0ks0002uaoot2x03802', // ID real da barbershop
+          serviceId: svc,
+          employeeId: emp,
+          clientId: 'client-' + Date.now(), // Gerar ID temporário
+          scheduledAt: start.toISOString(),
+          notes: `Cliente: ${cliName}, Telefone: ${cliPhone}`
+        })
       });
+      
+      if (!response.ok) {
+        throw new Error('Erro ao criar agendamento');
+      }
       toast.success('Agendamento criado');
       setOpen(false); setSvc(''); setEmp(''); setCliName(''); setCliPhone('');
       await load();
@@ -74,12 +92,30 @@ export default function AgendaPage() {
       const qs = new URLSearchParams({ start: toISO(range.s), end: toISO(range.e) });
       if (filterEmp && filterEmp !== 'all') qs.set('employeeId', filterEmp);
       if (filterSvc && filterSvc !== 'all') qs.set('serviceId', filterSvc);
-      const data = await apiFetch(`/api/v1/appointments/list?${qs.toString()}`, { tenantId });
-      setItems(data.items);
+      const response = await fetch(`/api/v1/appointments/list?${qs.toString()}`, {
+        headers: { 'x-tenant-id': tenantId }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setItems(data.items || []);
+      } else {
+        throw new Error('Erro ao carregar agendamentos');
+      }
     } catch (e: any) { toast.error(e.message || 'Falha ao carregar'); }
   }
   async function loadEmployees() {
-    try { const data = await apiFetch('/api/v1/employees', { tenantId }); setEmployees(data as Employee[]); } catch { }
+    try { 
+      const response = await fetch('/api/v1/employees', {
+        headers: { 'x-tenant-id': tenantId }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setEmployees(data as Employee[]);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar funcionários:', error);
+    }
   }
 
   useEffect(() => { loadEmployees(); }, [tenantId]);
@@ -89,7 +125,18 @@ export default function AgendaPage() {
 
   async function cancel(id: string) {
     try {
-      await apiFetch('/api/v1/appointments', { tenantId, init: { method: 'PUT', body: JSON.stringify({ id, status: 'CANCELED' }) } });
+      const response = await fetch('/api/v1/appointments', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-id': tenantId
+        },
+        body: JSON.stringify({ id, status: 'CANCELED' })
+      });
+      
+      if (!response.ok) {
+        throw new Error('Erro ao cancelar agendamento');
+      }
       toast.success('Agendamento cancelado');
       setItems(prev => prev.map(x => x.id === id ? { ...x, status: 'CANCELED' } : x));
     } catch (e: any) { toast.error(e.message || 'Erro ao cancelar'); }

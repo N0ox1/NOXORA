@@ -28,34 +28,38 @@ if (process.env.NODE_ENV !== 'production') {
   globalThis.prisma = prisma;
 }
 
-// Handler para erros de conexão
-prisma.$on('error', (e) => {
-  const errorMessage = e.message || '';
-  
-  // Filtrar erros de conexão fechada que são normais
-  const isConnectionClosed = errorMessage.includes('closed') || 
-                            errorMessage.includes('Connection terminated') ||
-                            errorMessage.includes('Connection closed') ||
-                            errorMessage.includes('kind: Closed') ||
-                            errorMessage.includes('Connection was closed by the client') ||
-                            errorMessage.includes('Connection lost');
-  
-  // Em desenvolvimento: mostrar apenas erros importantes
-  // Em produção: mostrar todos os erros (exceto connection closed)
-  if (process.env.NODE_ENV === 'development') {
-    if (!isConnectionClosed) {
-      console.warn('Prisma: Erro de conexão detectado:', e.message);
-    }
-  } else {
-    // Em produção, log todos os erros exceto connection closed
-    if (!isConnectionClosed) {
-      console.error('Prisma: Erro crítico de conexão:', e.message);
+// Handler para erros de conexão (apenas uma vez para evitar memory leak)
+if (!global.prismaErrorHandlerAdded) {
+  prisma.$on('error', (e) => {
+    const errorMessage = e.message || '';
+    
+    // Filtrar erros de conexão fechada que são normais
+    const isConnectionClosed = errorMessage.includes('closed') || 
+                              errorMessage.includes('Connection terminated') ||
+                              errorMessage.includes('Connection closed') ||
+                              errorMessage.includes('kind: Closed') ||
+                              errorMessage.includes('Connection was closed by the client') ||
+                              errorMessage.includes('Connection lost');
+    
+    // Em desenvolvimento: mostrar apenas erros importantes
+    // Em produção: mostrar todos os erros (exceto connection closed)
+    if (process.env.NODE_ENV === 'development') {
+      if (!isConnectionClosed) {
+        console.warn('Prisma: Erro de conexão detectado:', e.message);
+      }
     } else {
-      // Log silencioso para connection closed em produção
-      console.debug('Prisma: Conexão fechada (normal)');
+      // Em produção, log todos os erros exceto connection closed
+      if (!isConnectionClosed) {
+        console.error('Prisma: Erro crítico de conexão:', e.message);
+      } else {
+        // Log silencioso para connection closed em produção
+        console.debug('Prisma: Conexão fechada (normal)');
+      }
     }
-  }
-});
+  });
+  
+  global.prismaErrorHandlerAdded = true;
+}
 
 // Handler para desconexões inesperadas (Prisma 5.0+)
 process.on('beforeExit', async () => {

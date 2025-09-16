@@ -24,7 +24,7 @@ export default function ClientsPage() {
           'x-tenant-id': tenantId
         }
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         console.log('📋 Clientes carregados:', data);
@@ -49,16 +49,16 @@ export default function ClientsPage() {
           'x-tenant-id': tenantId
         }
       });
-      
+
       if (response.ok) {
         setItems(prev => prev.filter(i => i.id !== id));
         toast.success('Cliente removido com sucesso!');
       } else {
         toast.error('Erro ao remover cliente');
       }
-    } catch (e: any) { 
+    } catch (e: any) {
       console.error('Erro ao remover cliente:', e);
-      toast.error(e.message); 
+      toast.error(e.message);
     }
   }
 
