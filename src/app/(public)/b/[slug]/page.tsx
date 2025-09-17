@@ -216,9 +216,9 @@ export default function BarbershopPage() {
           'x-tenant-id': 'cmffwm0j20000uaoo2c4ugtvx'
         },
         body: JSON.stringify({
-          name: clientInfo.name,
-          phone: clientInfo.phone,
-          email: clientInfo.email || null
+          name: clientInfo.name.trim(),
+          phone: clientInfo.phone.trim(),
+          ...(clientInfo.email && clientInfo.email.trim().length > 0 ? { email: clientInfo.email.trim() } : {})
         })
       });
 
