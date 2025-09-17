@@ -69,6 +69,29 @@ export default function AdminDashboard() {
   const [filterEmp, setFilterEmp] = useState<string>('all');
   const [filterSvc, setFilterSvc] = useState<string>('all');
 
+  // Estados para configurações
+  const [configurations, setConfigurations] = useState({
+    name: 'Barber Labs Centro',
+    slug: 'barber-labs-centro',
+    description: 'A melhor barbearia do centro da cidade',
+    address: 'Rua Exemplo, 123 - Centro, Cidade',
+    phone: '(11) 98765-4321',
+    email: 'contato@barberlabs.com',
+    instagram: '@barberlabs',
+    logoFile: null as File | null,
+    bannerFile: null as File | null,
+    openingHours: {
+      monday: { open: '09:00', close: '18:00', closed: false },
+      tuesday: { open: '09:00', close: '18:00', closed: false },
+      wednesday: { open: '09:00', close: '18:00', closed: false },
+      thursday: { open: '09:00', close: '18:00', closed: false },
+      friday: { open: '09:00', close: '18:00', closed: false },
+      saturday: { open: '09:00', close: '14:00', closed: false },
+      sunday: { open: '00:00', close: '00:00', closed: true },
+    }
+  });
+  const [savingConfig, setSavingConfig] = useState(false);
+
   // Estados para modais
   const [showServiceModal, setShowServiceModal] = useState(false);
   const [showEmployeeModal, setShowEmployeeModal] = useState(false);
@@ -399,6 +422,57 @@ export default function AdminDashboard() {
       case 'CONFIRMED': return 'Confirmado';
       case 'CANCELED': return 'Cancelado';
       default: return status;
+    }
+  };
+
+  // Funções para configurações
+  const handleConfigChange = (field: string, value: any) => {
+    setConfigurations(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleFileChange = (field: 'logoFile' | 'bannerFile', file: File | null) => {
+    setConfigurations(prev => ({
+      ...prev,
+      [field]: file
+    }));
+  };
+
+  const generateSlug = (name: string) => {
+    return name
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // Remove acentos
+      .replace(/[^a-z0-9\s-]/g, '') // Remove caracteres especiais
+      .replace(/\s+/g, '-') // Substitui espaços por hífens
+      .replace(/-+/g, '-') // Remove hífens duplicados
+      .trim();
+  };
+
+  const handleSlugChange = (name: string) => {
+    const newSlug = generateSlug(name);
+    setConfigurations(prev => ({
+      ...prev,
+      name,
+      slug: newSlug
+    }));
+  };
+
+  const saveConfigurations = async () => {
+    setSavingConfig(true);
+    try {
+      // Simular salvamento (aqui você implementaria a API real)
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      toast.success('Configurações salvas com sucesso!');
+      console.log('Configurações salvas:', configurations);
+    } catch (error) {
+      console.error('Erro ao salvar configurações:', error);
+      toast.error('Erro ao salvar configurações');
+    } finally {
+      setSavingConfig(false);
     }
   };
 
@@ -796,24 +870,38 @@ export default function AdminDashboard() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">Nome da Barbearia</label>
                     <input
                       type="text"
-                      defaultValue="Barber Labs Centro"
+                      value={configurations.name}
+                      onChange={(e) => handleSlugChange(e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Digite o nome da barbearia"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Slug</label>
-                    <input
-                      type="text"
-                      defaultValue="barber-labs-centro"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Slug (URL)</label>
+                    <div className="flex">
+                      <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 text-gray-500 text-sm">
+                        noxoraa.vercel.app/b/
+                      </span>
+                      <input
+                        type="text"
+                        value={configurations.slug}
+                        onChange={(e) => handleConfigChange('slug', e.target.value)}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-r-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="slug-da-barbearia"
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      O slug é gerado automaticamente baseado no nome, mas você pode editá-lo
+                    </p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
                     <textarea
-                      defaultValue="A melhor barbearia do centro da cidade"
+                      value={configurations.description}
+                      onChange={(e) => handleConfigChange('description', e.target.value)}
                       rows={3}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Descreva sua barbearia"
                     />
                   </div>
                 </div>
@@ -827,32 +915,40 @@ export default function AdminDashboard() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">Endereço</label>
                     <input
                       type="text"
-                      defaultValue="Rua Exemplo, 123 - Centro, Cidade"
+                      value={configurations.address}
+                      onChange={(e) => handleConfigChange('address', e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Rua, número - Bairro, Cidade"
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Telefone</label>
                     <input
                       type="text"
-                      defaultValue="(11) 98765-4321"
+                      value={configurations.phone}
+                      onChange={(e) => handleConfigChange('phone', e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="(11) 99999-9999"
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
                     <input
                       type="email"
-                      defaultValue="contato@barberlabs.com"
+                      value={configurations.email}
+                      onChange={(e) => handleConfigChange('email', e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="contato@barbearia.com"
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Instagram</label>
                     <input
                       type="text"
-                      defaultValue="@barberlabs"
+                      value={configurations.instagram}
+                      onChange={(e) => handleConfigChange('instagram', e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="@barbearia"
                     />
                   </div>
                 </div>
@@ -871,6 +967,7 @@ export default function AdminDashboard() {
                       <input
                         type="file"
                         accept="image/*"
+                        onChange={(e) => handleFileChange('logoFile', e.target.files?.[0] || null)}
                         className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
                       />
                       <p className="text-xs text-gray-500 mt-1">PNG, JPG até 2MB. Recomendado: 200x200px</p>
@@ -894,6 +991,7 @@ export default function AdminDashboard() {
                     <input
                       type="file"
                       accept="image/*"
+                      onChange={(e) => handleFileChange('bannerFile', e.target.files?.[0] || null)}
                       className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
                     />
                     <p className="text-xs text-gray-500 mt-1">PNG, JPG até 5MB. Recomendado: 1200x400px</p>
@@ -938,7 +1036,7 @@ export default function AdminDashboard() {
                     <span className="text-sm font-medium text-gray-700">URL da sua barbearia:</span>
                   </div>
                   <code className="text-sm text-blue-600 bg-blue-50 px-2 py-1 rounded">
-                    https://noxoraa.vercel.app/b/barber-labs-centro
+                    https://noxoraa.vercel.app/b/{configurations.slug}
                   </code>
                   <p className="text-xs text-gray-500 mt-2">
                     Esta é a URL que seus clientes usarão para fazer agendamentos.
@@ -948,8 +1046,24 @@ export default function AdminDashboard() {
             </div>
 
             <div className="mt-6 flex justify-end">
-              <button className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors">
-                Salvar Configurações
+              <button
+                onClick={saveConfigurations}
+                disabled={savingConfig}
+                className={`px-6 py-2 rounded-lg transition-colors flex items-center space-x-2 ${savingConfig
+                    ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                  }`}
+              >
+                {savingConfig ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    <span>Salvando...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Salvar Configurações</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
