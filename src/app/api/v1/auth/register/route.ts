@@ -7,6 +7,7 @@ const RegisterSchema = z.object({
     name: z.string().min(1, 'Nome é obrigatório'),
     email: z.string().email('Email inválido'),
     phone: z.string().min(1, 'Telefone é obrigatório'),
+    businessName: z.string().min(1, 'Nome do negócio é obrigatório'),
     password: z.string().min(6, 'Senha deve ter pelo menos 6 caracteres')
 });
 
@@ -31,52 +32,37 @@ export async function POST(req: NextRequest) {
             // Hash da senha
             const passwordHash = await hashPassword(data.password);
 
-            // Buscar ou criar tenant padrão
-            let defaultTenant = await prisma.tenant.findFirst({
-                where: { name: 'Default Tenant' }
-            });
-
-            if (!defaultTenant) {
-                defaultTenant = await prisma.tenant.create({
-                    data: {
-                        name: 'Default Tenant',
-                        plan: 'STARTER',
-                        status: 'ACTIVE',
-                        isActive: true
-                    }
-                });
-            }
-
-            // Buscar ou criar barbershop padrão
-            let defaultBarbershop = await prisma.barbershop.findFirst({
-                where: {
-                    tenantId: defaultTenant.id,
-                    slug: 'default-barbershop'
+            // Criar tenant para o negócio
+            const tenant = await prisma.tenant.create({
+                data: {
+                    name: data.businessName,
+                    plan: 'STARTER',
+                    status: 'ACTIVE',
+                    isActive: true
                 }
             });
 
-            if (!defaultBarbershop) {
-                defaultBarbershop = await prisma.barbershop.create({
-                    data: {
-                        tenantId: defaultTenant.id,
-                        slug: 'default-barbershop',
-                        name: 'Barbearia Padrão',
-                        description: 'Barbearia padrão para novos usuários',
-                        isActive: true
-                    }
-                });
-            }
+            // Criar barbearia para o tenant
+            const barbershop = await prisma.barbershop.create({
+                data: {
+                    tenantId: tenant.id,
+                    slug: data.businessName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
+                    name: data.businessName,
+                    description: `Barbearia ${data.businessName}`,
+                    isActive: true
+                }
+            });
 
             // Criar usuário (Employee)
             const user = await prisma.employee.create({
                 data: {
-                    tenantId: defaultTenant.id,
-                    barbershopId: defaultBarbershop.id,
+                    tenantId: tenant.id,
+                    barbershopId: barbershop.id,
                     name: data.name,
                     email: data.email,
                     phone: data.phone,
                     passwordHash,
-                    role: 'BARBER',
+                    role: 'OWNER',
                     active: true
                 },
                 select: {

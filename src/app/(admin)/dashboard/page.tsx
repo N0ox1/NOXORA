@@ -13,6 +13,7 @@ import {
   EyeIcon
 } from '@heroicons/react/24/outline';
 import { ImageIcon, Globe } from 'lucide-react';
+import { ConfirmationModal } from '@/components/ui/confirmation-modal';
 
 interface Service {
   id: string;
@@ -71,13 +72,13 @@ export default function AdminDashboard() {
 
   // Estados para configurações
   const [configurations, setConfigurations] = useState({
-    name: 'Barber Labs Centro',
-    slug: 'barber-labs-centro',
-    description: 'A melhor barbearia do centro da cidade',
-    address: 'Rua Exemplo, 123 - Centro, Cidade',
-    phone: '(11) 98765-4321',
-    email: 'contato@barberlabs.com',
-    instagram: '@barberlabs',
+    name: '',
+    slug: '',
+    description: '',
+    address: '',
+    phone: '',
+    email: '',
+    instagram: '',
     logoFile: null as File | null,
     bannerFile: null as File | null,
     openingHours: {
@@ -91,12 +92,18 @@ export default function AdminDashboard() {
     }
   });
   const [savingConfig, setSavingConfig] = useState(false);
+  const [userInfo, setUserInfo] = useState<{ tenantId: string; barbershopId: string } | null>(null);
 
   // Estados para modais
   const [showServiceModal, setShowServiceModal] = useState(false);
   const [showEmployeeModal, setShowEmployeeModal] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+
+  // Estados para modal de confirmação
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [employeeToDelete, setEmployeeToDelete] = useState<Employee | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Funções de conversão de preço
   const reaisToCents = (reais: string): number => {
@@ -129,19 +136,54 @@ export default function AdminDashboard() {
 
   // Carregar dados reais do banco
   useEffect(() => {
-    loadServices();
-    loadEmployees();
-    loadAppointments();
-    loadClients();
+    loadUserInfo();
   }, []);
 
+  useEffect(() => {
+    if (userInfo) {
+      loadServices();
+      loadEmployees();
+      loadAppointments();
+      loadClients();
+      loadConfigurations();
+    }
+  }, [userInfo]);
+
   // Funções para carregar dados reais
+  const loadUserInfo = async () => {
+    console.log('🔍 loadUserInfo: Iniciando carregamento de informações do usuário');
+    try {
+      const response = await fetch('/api/v1/auth/me', {
+        credentials: 'include'
+      });
+      console.log('📡 loadUserInfo: Resposta da API /me:', response.status, response.ok);
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('📋 loadUserInfo: Dados do usuário:', data);
+        setUserInfo({
+          tenantId: data.user.tenantId,
+          barbershopId: data.user.barbershopId
+        });
+        console.log('✅ loadUserInfo: userInfo definido com sucesso');
+      } else {
+        const errorData = await response.json();
+        console.error('❌ loadUserInfo: Erro na API /me:', errorData);
+      }
+    } catch (error) {
+      console.error('❌ loadUserInfo: Erro ao carregar informações do usuário:', error);
+    }
+  };
+
   const loadServices = async () => {
+    if (!userInfo) return;
+
     try {
       const response = await fetch('/api/v1/services', {
         headers: {
-          'x-tenant-id': 'cmffwm0j20000uaoo2c4ugtvx' // Tenant ID fixo para desenvolvimento
-        }
+          'x-tenant-id': userInfo.tenantId
+        },
+        credentials: 'include'
       });
       if (response.ok) {
         const data = await response.json();
@@ -165,11 +207,14 @@ export default function AdminDashboard() {
   };
 
   const loadEmployees = async () => {
+    if (!userInfo) return;
+
     try {
       const response = await fetch('/api/v1/employees', {
         headers: {
-          'x-tenant-id': 'cmffwm0j20000uaoo2c4ugtvx'
-        }
+          'x-tenant-id': userInfo.tenantId
+        },
+        credentials: 'include'
       });
       if (response.ok) {
         const data = await response.json();
@@ -188,6 +233,8 @@ export default function AdminDashboard() {
   };
 
   const loadAppointments = async () => {
+    if (!userInfo) return;
+
     try {
       const startDate = new Date(selectedDate);
       const endDate = new Date(startDate);
@@ -203,8 +250,9 @@ export default function AdminDashboard() {
 
       const response = await fetch(`/api/v1/appointments/list?${qs.toString()}`, {
         headers: {
-          'x-tenant-id': 'cmffwm0j20000uaoo2c4ugtvx'
-        }
+          'x-tenant-id': userInfo.tenantId
+        },
+        credentials: 'include'
       });
 
       if (response.ok) {
@@ -220,11 +268,14 @@ export default function AdminDashboard() {
   };
 
   const loadClients = async () => {
+    if (!userInfo) return;
+
     try {
       const response = await fetch('/api/v1/clients', {
         headers: {
-          'x-tenant-id': 'cmffwm0j20000uaoo2c4ugtvx'
-        }
+          'x-tenant-id': userInfo.tenantId
+        },
+        credentials: 'include'
       });
       if (response.ok) {
         const data = await response.json();
@@ -345,28 +396,58 @@ export default function AdminDashboard() {
   };
 
   // Handlers para Employees
-  const handleEmployeeSubmit = (e: React.FormEvent) => {
+  const handleEmployeeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (editingEmployee) {
-      // Editar funcionário existente
-      setEmployees(prev => prev.map(e =>
-        e.id === editingEmployee.id
-          ? { ...employeeForm, id: editingEmployee.id }
-          : e
-      ));
-    } else {
-      // Criar novo funcionário
-      const newEmployee: Employee = {
-        ...employeeForm,
-        id: `emp_${Date.now()}`
-      };
-      setEmployees(prev => [...prev, newEmployee]);
-    }
+    try {
+      if (editingEmployee) {
+        // Editar funcionário existente
+        const response = await fetch(`/api/v1/employees/${editingEmployee.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-tenant-id': 'cmffwm0j20000uaoo2c4ugtvx'
+          },
+          body: JSON.stringify(employeeForm)
+        });
 
-    setShowEmployeeModal(false);
-    setEditingEmployee(null);
-    setEmployeeForm({ name: '', role: 'BARBER', email: '', phone: '', active: true });
+        if (!response.ok) {
+          throw new Error('Erro ao atualizar funcionário');
+        }
+
+        toast.success('Funcionário atualizado com sucesso!');
+      } else {
+        // Criar novo funcionário
+        const response = await fetch('/api/v1/employees', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-tenant-id': 'cmffwm0j20000uaoo2c4ugtvx'
+          },
+          body: JSON.stringify({
+            ...employeeForm,
+            barbershopId: 'cmffwm0ks0002uaoot2x03802' // ID da barbearia do tenant
+          })
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || 'Erro ao criar funcionário');
+        }
+
+        toast.success('Funcionário criado com sucesso!');
+      }
+
+      // Recarregar lista de funcionários
+      await loadEmployees();
+
+      setShowEmployeeModal(false);
+      setEditingEmployee(null);
+      setEmployeeForm({ name: '', role: 'BARBER', email: '', phone: '', active: true });
+    } catch (error) {
+      console.error('Erro ao salvar funcionário:', error);
+      toast.error(error instanceof Error ? error.message : 'Erro ao salvar funcionário');
+    }
   };
 
   const handleEditEmployee = (employee: Employee) => {
@@ -381,10 +462,48 @@ export default function AdminDashboard() {
     setShowEmployeeModal(true);
   };
 
-  const handleDeleteEmployee = (employeeId: string) => {
-    if (confirm('Tem certeza que deseja excluir este funcionário?')) {
-      setEmployees(prev => prev.filter(e => e.id !== employeeId));
+  const handleDeleteEmployee = (employee: Employee) => {
+    setEmployeeToDelete(employee);
+    setShowDeleteModal(true);
+  };
+
+  const confirmDeleteEmployee = async () => {
+    if (!employeeToDelete) return;
+
+    setIsDeleting(true);
+    try {
+      const response = await fetch(`/api/v1/employees/${employeeToDelete.id}`, {
+        method: 'DELETE',
+        headers: {
+          'x-tenant-id': 'cmffwm0j20000uaoo2c4ugtvx'
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Erro ao excluir funcionário');
+      }
+
+      toast.success('Funcionário excluído com sucesso!');
+
+      // Recarregar lista de funcionários
+      await loadEmployees();
+
+      // Fechar modal
+      setShowDeleteModal(false);
+      setEmployeeToDelete(null);
+    } catch (error) {
+      console.error('Erro ao excluir funcionário:', error);
+      toast.error(error instanceof Error ? error.message : 'Erro ao excluir funcionário');
+    } finally {
+      setIsDeleting(false);
     }
+  };
+
+  const cancelDeleteEmployee = () => {
+    setShowDeleteModal(false);
+    setEmployeeToDelete(null);
+    setIsDeleting(false);
   };
 
   // Utilitários
@@ -460,17 +579,87 @@ export default function AdminDashboard() {
     }));
   };
 
+  // Carregar configurações
+  const loadConfigurations = async () => {
+    if (!userInfo) {
+      console.log('❌ loadConfigurations: userInfo não disponível');
+      return;
+    }
+
+    console.log('🔍 loadConfigurations: Carregando configurações para tenant:', userInfo.tenantId);
+
+    try {
+      const response = await fetch('/api/v1/barbershop/settings', {
+        headers: { 'x-tenant-id': userInfo.tenantId },
+        credentials: 'include'
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Erro ao carregar configurações');
+      }
+
+      const data = await response.json();
+
+      // Parse workingHours se for string
+      const workingHours = typeof data.workingHours === 'string'
+        ? JSON.parse(data.workingHours)
+        : data.workingHours;
+
+      setConfigurations(prev => ({
+        ...prev,
+        name: data.name || prev.name,
+        slug: data.slug || prev.slug,
+        description: data.description || prev.description,
+        address: data.address || prev.address,
+        phone: data.phone || prev.phone,
+        email: data.email || prev.email,
+        instagram: data.instagram || prev.instagram,
+        openingHours: workingHours || prev.openingHours
+      }));
+
+      console.log('✅ Configurações carregadas:', data);
+    } catch (error) {
+      console.error('Erro ao carregar configurações:', error);
+      // Não mostrar toast de erro para não incomodar o usuário
+    }
+  };
+
   const saveConfigurations = async () => {
+    if (!userInfo) return;
+
     setSavingConfig(true);
     try {
-      // Simular salvamento (aqui você implementaria a API real)
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      const response = await fetch('/api/v1/barbershop/settings', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-id': userInfo.tenantId
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          name: configurations.name,
+          slug: configurations.slug,
+          description: configurations.description,
+          address: configurations.address,
+          phone: configurations.phone,
+          email: configurations.email,
+          instagram: configurations.instagram,
+          workingHours: configurations.openingHours
+        })
+      });
 
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Erro ao salvar configurações');
+      }
+
+      const result = await response.json();
+      console.log('✅ Configurações salvas:', result);
       toast.success('Configurações salvas com sucesso!');
-      console.log('Configurações salvas:', configurations);
     } catch (error) {
       console.error('Erro ao salvar configurações:', error);
-      toast.error('Erro ao salvar configurações');
+      toast.error(error instanceof Error ? error.message : 'Erro ao salvar configurações');
     } finally {
       setSavingConfig(false);
     }
@@ -702,7 +891,7 @@ export default function AdminDashboard() {
                           <PencilIcon className="h-4 w-4" />
                         </button>
                         <button
-                          onClick={() => handleDeleteEmployee(employee.id)}
+                          onClick={() => handleDeleteEmployee(employee)}
                           className="text-red-600 hover:text-red-900"
                         >
                           <TrashIcon className="h-4 w-4" />
@@ -1050,8 +1239,8 @@ export default function AdminDashboard() {
                 onClick={saveConfigurations}
                 disabled={savingConfig}
                 className={`px-6 py-2 rounded-lg transition-colors flex items-center space-x-2 ${savingConfig
-                    ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
-                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                  ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                  : 'bg-blue-600 text-white hover:bg-blue-700'
                   }`}
               >
                 {savingConfig ? (
@@ -1355,6 +1544,19 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
+
+      {/* Modal de Confirmação de Exclusão */}
+      <ConfirmationModal
+        isOpen={showDeleteModal}
+        onClose={cancelDeleteEmployee}
+        onConfirm={confirmDeleteEmployee}
+        title="Excluir Funcionário"
+        message={`Tem certeza que deseja excluir o funcionário "${employeeToDelete?.name}"? Esta ação não pode ser desfeita.`}
+        confirmText="Excluir"
+        cancelText="Cancelar"
+        type="danger"
+        isLoading={isDeleting}
+      />
     </div>
   );
 }

@@ -30,10 +30,14 @@ interface AppointmentSlot {
 
 async function noxoraFetchShop(slug: string) {
   try {
-    const res = await fetch(`${process.env.BASE_URL || ''}/api/barbershop/public/${slug}`, { headers: { 'X-Tenant-Id': 'tnt_1' }, cache: 'no-store' });
-    if (!res.ok) return null;
+    const res = await fetch(`/api/barbershop/public/${slug}`, { cache: 'no-store' });
+    if (!res.ok) {
+      console.error('❌ Falha ao carregar barbearia pública:', res.status, res.statusText);
+      return null;
+    }
     return res.json();
-  } catch {
+  } catch (e) {
+    console.error('❌ Erro ao buscar barbearia pública:', e);
     return null;
   }
 }
@@ -63,6 +67,12 @@ export default function BarbershopPage() {
   const params = useParams();
   const slug = params.slug as string;
 
+  // Evitar hydration mismatch: só renderizar após montar no cliente
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const [barbershop, setBarbershop] = useState<any>(null);
   const [services, setServices] = useState<Service[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -79,68 +89,36 @@ export default function BarbershopPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isBooking, setIsBooking] = useState(false);
 
-  // Dados mock para desenvolvimento
-  const mockBarbershop = {
-    id: 'shop_1',
-    name: 'Barber Labs Centro',
-    description: 'Barbearia moderna no coração da cidade',
-    address: 'Rua das Flores, 123 - Centro',
-    phone: '+55 11 3000-0000',
-    hours: 'Seg-Sex: 9h-19h, Sáb: 9h-17h',
-    slug: slug
-  };
+  // Removidos mocks: sempre usar dados reais da API
 
-  const mockServices: Service[] = [
-    {
-      id: 'cmfmrc9n70005ual4ifu436px', // CUID real do banco
-      name: 'Corte Masculino',
-      duration_min: 30,
-      price_cents: 4500,
-      description: 'Corte tradicional masculino com acabamento perfeito',
-      is_active: true
-    },
-    {
-      id: 'cmfmqw2zx0001ual4os0h78ev', // CUID real do banco
-      name: 'Barba',
-      duration_min: 20,
-      price_cents: 2500,
-      description: 'Acabamento de barba com navalha',
-      is_active: true
-    },
-    {
-      id: 'cmfg4up1c000zualkro93777m', // CUID real do banco
-      name: 'Corte + Barba',
-      duration_min: 45,
-      price_cents: 6500,
-      description: 'Combo completo de corte e barba',
-      is_active: true
-    }
-  ];
-
-  const mockEmployees: Employee[] = [
-    {
-      id: 'cmfg5i6jp0001uan0dtzv21b4', // CUID real do banco
-      name: 'Rafa',
-      role: 'BARBER',
-      avatar: '/avatars/rafa.jpg',
-      active: true
-    },
-    {
-      id: 'cmfg5i6jp0001uan0dtzv21b4', // Usar o mesmo ID real (temporário)
-      name: 'João',
-      role: 'BARBER',
-      avatar: '/avatars/joao.jpg',
-      active: true
-    }
-  ];
-
-  // Carregar dados
+  // Carregar dados reais da API pública
   useEffect(() => {
-    console.log('Carregando dados mock para desenvolvimento');
-    setBarbershop(mockBarbershop);
-    setServices(mockServices);
-    setEmployees(mockEmployees);
-    setIsLoading(false);
+    let alive = true;
+    (async () => {
+      try {
+        setIsLoading(true);
+        const data = await noxoraFetchShop(slug);
+        if (!alive) return;
+        if (data) {
+          setBarbershop({
+            id: data.id,
+            name: data.name,
+            description: data.description,
+            slug: data.slug
+          });
+          setServices(data.services || []);
+          setEmployees(data.employees || []);
+        } else {
+          // Sem fallback para evitar dados mockados incorretos
+          setBarbershop({ id: 'unknown', name: slug, description: '', slug });
+          setServices([]);
+          setEmployees([]);
+        }
+      } finally {
+        if (alive) setIsLoading(false);
+      }
+    })();
+    return () => { alive = false; };
   }, [slug]);
 
   // Gerar slots de horário disponíveis
@@ -278,13 +256,13 @@ export default function BarbershopPage() {
       setSelectedTime('');
       setClientInfo({ name: '', phone: '', email: '' });
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro geral ao criar agendamento:', {
-        message: error.message,
-        stack: error.stack,
+        message: error?.message || 'Erro desconhecido',
+        stack: error?.stack,
         error: error
       });
-      alert(`Erro ao realizar agendamento: ${error.message}`);
+      alert(`Erro ao realizar agendamento: ${error?.message || 'Erro desconhecido'}`);
     } finally {
       setIsBooking(false);
     }
@@ -300,7 +278,7 @@ export default function BarbershopPage() {
     return hours > 0 ? `${hours}h${mins > 0 ? ` ${mins}min` : ''}` : `${mins}min`;
   };
 
-  if (isLoading) {
+  if (!mounted || isLoading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-[#01ABFE]"></div>
@@ -405,9 +383,9 @@ export default function BarbershopPage() {
             <h2 className="text-2xl font-semibold text-white mb-2">Escolha o Barbeiro</h2>
             <p className="text-gray-400 mb-6">Selecione o profissional</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {employees.filter(emp => emp.active).map((employee) => (
+              {employees.filter(emp => emp.active).map((employee, idx) => (
                 <div
-                  key={employee.id}
+                  key={`${employee.id}-${idx}`}
                   onClick={() => handleEmployeeSelect(employee)}
                   className="p-6 border border-gray-600 rounded-lg cursor-pointer transition-all hover:scale-105 bg-gray-700 hover:border-[#01ABFE]"
                 >

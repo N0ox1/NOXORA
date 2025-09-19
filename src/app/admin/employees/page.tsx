@@ -73,18 +73,49 @@ export default function BarbershopSettingsPage() {
   async function loadSettings() {
     setLoading(true);
     try {
-      // TODO: Implementar API para buscar configurações da barbearia
-      // const response = await fetch(`/api/v1/barbershop/settings`, {
-      //   headers: { 'x-tenant-id': tenantId }
-      // });
-      // const data = await response.json();
-      // setSettings(data);
+      const response = await fetch('/api/v1/barbershop/settings', {
+        headers: { 'x-tenant-id': tenantId }
+      });
 
-      // Por enquanto, usar dados mock
-      console.log('Carregando configurações da barbearia...');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Erro ao carregar configurações');
+      }
+
+      const data = await response.json();
+
+      // Parse workingHours se for string
+      const workingHours = typeof data.workingHours === 'string'
+        ? JSON.parse(data.workingHours)
+        : data.workingHours;
+
+      setSettings({
+        id: data.id,
+        name: data.name || 'Barber Labs Centro',
+        slug: data.slug || 'barber-labs-centro',
+        description: data.description || 'A melhor barbearia do centro da cidade',
+        logoUrl: data.logoUrl || '',
+        bannerUrl: data.bannerUrl || '',
+        address: data.address || 'Rua das Flores, 123 - Centro',
+        phone: data.phone || '(11) 99999-9999',
+        email: data.email || 'contato@barberlabs.com',
+        instagram: data.instagram || '@barberlabs',
+        whatsapp: data.whatsapp || '11999999999',
+        workingHours: workingHours || {
+          monday: { open: '09:00', close: '18:00', closed: false },
+          tuesday: { open: '09:00', close: '18:00', closed: false },
+          wednesday: { open: '09:00', close: '18:00', closed: false },
+          thursday: { open: '09:00', close: '18:00', closed: false },
+          friday: { open: '09:00', close: '19:00', closed: false },
+          saturday: { open: '08:00', close: '17:00', closed: false },
+          sunday: { open: '10:00', close: '16:00', closed: true }
+        }
+      });
+
+      console.log('✅ Configurações carregadas:', data);
     } catch (error) {
       console.error('Erro ao carregar configurações:', error);
-      toast.error('Erro ao carregar configurações');
+      toast.error(error instanceof Error ? error.message : 'Erro ao carregar configurações');
     } finally {
       setLoading(false);
     }
@@ -94,22 +125,29 @@ export default function BarbershopSettingsPage() {
   async function saveSettings() {
     setSaving(true);
     try {
-      // TODO: Implementar API para salvar configurações
-      // const response = await fetch('/api/v1/barbershop/settings', {
-      //   method: 'PUT',
-      //   headers: {
-      //     'Content-Type': 'application/json',
-      //     'x-tenant-id': tenantId
-      //   },
-      //   body: JSON.stringify(settings)
-      // });
+      const response = await fetch('/api/v1/barbershop/settings', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-id': tenantId
+        },
+        body: JSON.stringify(settings)
+      });
 
-      // Simular salvamento
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Erro ao salvar configurações');
+      }
+
+      const result = await response.json();
+      console.log('✅ Configurações salvas:', result);
       toast.success('Configurações salvas com sucesso!');
+
+      // Recarregar as configurações para garantir sincronização
+      await loadSettings();
     } catch (error) {
       console.error('Erro ao salvar configurações:', error);
-      toast.error('Erro ao salvar configurações');
+      toast.error(error instanceof Error ? error.message : 'Erro ao salvar configurações');
     } finally {
       setSaving(false);
     }

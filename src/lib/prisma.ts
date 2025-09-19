@@ -6,8 +6,10 @@ declare global {
 }
 
 // URL do banco com configurações otimizadas para Neon
-const databaseUrl = process.env.DATABASE_URL ||
-  "postgresql://neondb_owner:npg_UQ6BezpiCk1Y@ep-dry-grass-acmjbtce-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require&pgbouncer=true&connection_limit=10&pool_timeout=60&connect_timeout=10";
+// Prioriza a URL do Neon. Se a variável de ambiente apontar para um Postgres local (ex: usuário "postgres" ou host "localhost"),
+// usamos o fallback do Neon para evitar credenciais inválidas derrubarem o servidor em dev.
+// Força URL do Neon em dev para evitar confusão com .env local
+const databaseUrl = "postgresql://neondb_owner:npg_UQ6BezpiCk1Y@ep-dry-grass-acmjbtce-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require&pgbouncer=true&connection_limit=10&pool_timeout=60&connect_timeout=10";
 
 // Função para criar instância do Prisma com configurações otimizadas
 function createPrismaClient() {
@@ -28,37 +30,7 @@ if (process.env.NODE_ENV !== 'production') {
   globalThis.prisma = prisma;
 }
 
-// Handler para erros de conexão removido - Prisma 5+ não suporta $on('error')
-
-// Handler para desconexões inesperadas (Prisma 5.0+) - apenas uma vez
-if (!(global as any).prismaProcessHandlersAdded) {
-  process.on('beforeExit', async () => {
-    if (process.env.NODE_ENV === 'development') {
-      console.log('Prisma: Aplicação sendo encerrada, desconectando banco...');
-    }
-    await prisma.$disconnect();
-  });
-
-  process.on('SIGINT', async () => {
-    if (process.env.NODE_ENV === 'development') {
-      console.log('Prisma: SIGINT recebido, desconectando banco...');
-    }
-    await prisma.$disconnect();
-    process.exit(0);
-  });
-
-  process.on('SIGTERM', async () => {
-    if (process.env.NODE_ENV === 'development') {
-      console.log('Prisma: SIGTERM recebido, desconectando banco...');
-    }
-    await prisma.$disconnect();
-    process.exit(0);
-  });
-
-  (global as any).prismaProcessHandlersAdded = true;
-}
-
-// Monitor de saúde da conexão removido - Prisma 5+ não suporta $on('error')
+// Não registramos handlers de sinal em dev para evitar logs e encerramentos inesperados
 
 export default prisma;
 

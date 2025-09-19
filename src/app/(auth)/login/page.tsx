@@ -69,16 +69,16 @@ export default function LoginPage() {
     try {
       // Simular envio de email de recuperação
       await new Promise(resolve => setTimeout(resolve, 2000));
-      
+
       setForgotPasswordMessage('Email de recuperação enviado! Verifique sua caixa de entrada.');
       setForgotPasswordEmail('');
-      
+
       // Fechar modal após 3 segundos
       setTimeout(() => {
         setShowForgotPassword(false);
         setForgotPasswordMessage('');
       }, 3000);
-      
+
     } catch (error) {
       setForgotPasswordMessage('Erro ao enviar email. Tente novamente.');
     } finally {
@@ -87,49 +87,72 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#01ABFE] via-[#0099E6] to-[#007ACC] py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Entrar na sua conta
+        {/* Logo */}
+        <div className="text-center">
+          <div className="mx-auto h-20 w-20 bg-white rounded-full flex items-center justify-center shadow-lg">
+            <svg className="h-12 w-12 text-[#01ABFE]" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+            </svg>
+          </div>
+          <h2 className="mt-6 text-center text-4xl font-bold text-white">
+            Bem-vindo de volta
           </h2>
+          <p className="mt-2 text-center text-lg text-blue-100">
+            Entre na sua conta Noxora
+          </p>
         </div>
-        <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
+
+        {/* Card de Login */}
+        <div className="bg-white/95 backdrop-blur-sm py-10 px-8 shadow-2xl rounded-2xl border border-white/20">
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Campo Email */}
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="email" className="block text-sm font-semibold text-gray-700 mb-2">
                 Email
               </label>
-              <div className="mt-1">
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" />
+                  </svg>
+                </div>
                 <input
                   id="email"
                   name="email"
                   type="email"
                   autoComplete="email"
                   required
-                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                  className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-xl placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#01ABFE] focus:border-[#01ABFE] transition-all duration-200 text-gray-900"
                   placeholder="seu@email.com"
                 />
               </div>
             </div>
 
+            {/* Campo Senha */}
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="password" className="block text-sm font-semibold text-gray-700 mb-2">
                 Senha
               </label>
-              <div className="mt-1 relative">
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                </div>
                 <input
                   id="password"
                   name="password"
                   type={showPassword ? "text" : "password"}
                   autoComplete="current-password"
                   required
-                  className="appearance-none block w-full px-3 py-2 pr-10 border border-gray-300 rounded-md placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                  className="block w-full pl-10 pr-12 py-3 border border-gray-300 rounded-xl placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#01ABFE] focus:border-[#01ABFE] transition-all duration-200 text-gray-900"
                   placeholder="••••••••"
                 />
                 <button
                   type="button"
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center hover:text-[#01ABFE] transition-colors duration-200"
                   onClick={() => setShowPassword(!showPassword)}
                 >
                   {showPassword ? (
@@ -146,15 +169,16 @@ export default function LoginPage() {
               </div>
             </div>
 
+            {/* Opções */}
             <div className="flex items-center justify-between">
               <div className="flex items-center">
                 <input
                   id="remember-me"
                   name="remember-me"
                   type="checkbox"
-                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                  className="h-4 w-4 text-[#01ABFE] focus:ring-[#01ABFE] border-gray-300 rounded"
                 />
-                <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">
+                <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-700">
                   Lembrar de mim
                 </label>
               </div>
@@ -163,15 +187,16 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setShowForgotPassword(true)}
-                  className="font-medium text-indigo-600 hover:text-indigo-500"
+                  className="font-medium text-[#01ABFE] hover:text-[#0099E6] transition-colors duration-200"
                 >
                   Esqueceu sua senha?
                 </button>
               </div>
             </div>
 
+            {/* Mensagem de Erro */}
             {errors.submit && (
-              <div className="rounded-md bg-red-50 p-4 border border-red-200">
+              <div className="rounded-xl bg-red-50 p-4 border border-red-200">
                 <div className="flex">
                   <div className="flex-shrink-0">
                     <svg className="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
@@ -190,14 +215,39 @@ export default function LoginPage() {
               </div>
             )}
 
+            {/* Botão de Login */}
             <div>
               <button
                 type="submit"
                 disabled={isLoading}
-                className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-semibold rounded-xl text-white bg-gradient-to-r from-[#01ABFE] to-[#0099E6] hover:from-[#0099E6] hover:to-[#007ACC] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#01ABFE] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
               >
-                {isLoading ? 'Entrando...' : 'Entrar'}
+                {isLoading ? (
+                  <div className="flex items-center">
+                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Entrando...
+                  </div>
+                ) : (
+                  'Entrar'
+                )}
               </button>
+            </div>
+
+            {/* Link para Cadastro */}
+            <div className="text-center">
+              <p className="text-sm text-gray-600">
+                Não tem uma conta?{' '}
+                <button
+                  type="button"
+                  onClick={() => router.push('/register')}
+                  className="font-semibold text-[#01ABFE] hover:text-[#0099E6] transition-colors duration-200"
+                >
+                  Cadastre-se aqui
+                </button>
+              </p>
             </div>
           </form>
         </div>
@@ -205,63 +255,79 @@ export default function LoginPage() {
 
       {/* Modal Esqueceu a Senha */}
       {showForgotPassword && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-            <div className="mt-3">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-medium text-gray-900">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4">
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-2xl font-bold text-gray-900">
                   Recuperar Senha
                 </h3>
                 <button
                   onClick={() => setShowForgotPassword(false)}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="text-gray-400 hover:text-gray-600 transition-colors duration-200 p-1"
                 >
                   <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
-              
-              <form onSubmit={handleForgotPassword} className="space-y-4">
+
+              <form onSubmit={handleForgotPassword} className="space-y-6">
                 <div>
-                  <label htmlFor="forgot-email" className="block text-sm font-medium text-gray-700">
+                  <label htmlFor="forgot-email" className="block text-sm font-semibold text-gray-700 mb-2">
                     Email
                   </label>
-                  <input
-                    id="forgot-email"
-                    type="email"
-                    required
-                    value={forgotPasswordEmail}
-                    onChange={(e) => setForgotPasswordEmail(e.target.value)}
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                    placeholder="seu@email.com"
-                  />
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" />
+                      </svg>
+                    </div>
+                    <input
+                      id="forgot-email"
+                      type="email"
+                      required
+                      value={forgotPasswordEmail}
+                      onChange={(e) => setForgotPasswordEmail(e.target.value)}
+                      className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-xl placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#01ABFE] focus:border-[#01ABFE] transition-all duration-200 text-gray-900"
+                      placeholder="seu@email.com"
+                    />
+                  </div>
                 </div>
-                
+
                 {forgotPasswordMessage && (
-                  <div className={`p-3 rounded-md text-sm ${
-                    forgotPasswordMessage.includes('Erro') 
+                  <div className={`p-4 rounded-xl text-sm ${forgotPasswordMessage.includes('Erro')
                       ? 'bg-red-50 text-red-800 border border-red-200'
                       : 'bg-green-50 text-green-800 border border-green-200'
-                  }`}>
+                    }`}>
                     {forgotPasswordMessage}
                   </div>
                 )}
-                
+
                 <div className="flex space-x-3">
                   <button
                     type="button"
                     onClick={() => setShowForgotPassword(false)}
-                    className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                    className="flex-1 px-4 py-3 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#01ABFE] transition-all duration-200 font-medium"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
                     disabled={forgotPasswordLoading}
-                    className="flex-1 px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex-1 px-4 py-3 border border-transparent rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-[#01ABFE] to-[#0099E6] hover:from-[#0099E6] hover:to-[#007ACC] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#01ABFE] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-xl"
                   >
-                    {forgotPasswordLoading ? 'Enviando...' : 'Enviar Email'}
+                    {forgotPasswordLoading ? (
+                      <div className="flex items-center justify-center">
+                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Enviando...
+                      </div>
+                    ) : (
+                      'Enviar Email'
+                    )}
                   </button>
                 </div>
               </form>

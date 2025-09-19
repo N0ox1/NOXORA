@@ -49,6 +49,7 @@ export const tenantHeader = z.object({
 export const employeeCreate = z.object({
     name: safeString,
     email: email.optional(),
+    phone: z.string().optional(),
     role: z.enum(['OWNER', 'MANAGER', 'BARBER', 'ASSISTANT']),
     barbershopId: cuid
 });
@@ -56,6 +57,7 @@ export const employeeCreate = z.object({
 export const employeeUpdate = z.object({
     name: safeString.optional(),
     email: email.optional(),
+    phone: z.string().optional(),
     role: z.enum(['OWNER', 'MANAGER', 'BARBER', 'ASSISTANT']).optional()
 });
 
@@ -78,8 +80,9 @@ export const serviceUpdate = z.object({
 // Appointment schemas
 export const appointmentCreate = z.object({
     clientId: cuid,
-    employeeId: cuid,
-    serviceId: cuid,
+    // Em produção, IDs podem vir de diferentes origens; não force formato aqui
+    employeeId: z.string().min(1),
+    serviceId: z.string().min(1),
     barbershopId: cuid,
     scheduledAt: z.string().datetime(),
     notes: z.string().max(500).optional()

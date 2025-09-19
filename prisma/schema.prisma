@@ -38,6 +38,11 @@ model Barbershop {
   address      String?
   phone        String?
   email        String?
+  instagram    String?
+  whatsapp     String?
+  logoUrl      String?
+  bannerUrl    String?
+  workingHours Json?
   isActive     Boolean       @default(true)
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
