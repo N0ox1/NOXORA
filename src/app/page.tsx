@@ -52,23 +52,19 @@ export default function HomePage() {
                 Ideal para barbearias de todos os tamanhos.
               </p>
               <div className="mt-5 max-w-md mx-auto sm:flex sm:justify-center md:mt-8">
-                <div className="rounded-md shadow">
-                  <Link
-                    href="/register"
-                    className="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-white md:py-4 md:text-lg md:px-10 transition-all duration-300 hover:scale-105"
-                    style={{ background: 'linear-gradient(135deg, #6FD6FF, #01ABFE, #007FB8)' }}
-                  >
-                    Começar Agora
-                  </Link>
-                </div>
-                <div className="mt-3 rounded-md shadow sm:mt-0 sm:ml-3">
-                  <Link
-                    href="/b/demo"
-                    className="w-full flex items-center justify-center px-8 py-3 border border-[#01ABFE] text-base font-medium rounded-md text-[#01ABFE] bg-white hover:bg-[#01ABFE] hover:text-white md:py-4 md:text-lg md:px-10 transition-colors"
-                  >
-                    Ver Demo
-                  </Link>
-                </div>
+                <Link
+                  href="/register"
+                  className="w-full flex items-center justify-center px-8 py-3 text-base font-medium rounded-lg text-white md:py-4 md:text-lg md:px-10 transition-all duration-300 hover:scale-105 shadow-lg hover:shadow-xl"
+                  style={{ background: 'linear-gradient(135deg, #6FD6FF, #01ABFE, #007FB8)' }}
+                >
+                  Começar Agora
+                </Link>
+                <Link
+                  href="/b/demo"
+                  className="mt-3 w-full flex items-center justify-center px-8 py-3 border border-[#01ABFE] text-base font-medium rounded-lg text-[#01ABFE] bg-white hover:bg-[#01ABFE] hover:text-white md:py-4 md:text-lg md:px-10 transition-all duration-300 hover:scale-105 shadow-lg hover:shadow-xl sm:mt-0 sm:ml-3"
+                >
+                  Ver Demo
+                </Link>
               </div>
             </div>
           </div>

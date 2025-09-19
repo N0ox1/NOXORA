@@ -6,13 +6,11 @@ import {
   PlusIcon,
   PencilIcon,
   TrashIcon,
-  UserGroupIcon,
   CogIcon,
-  CalendarDaysIcon,
   UsersIcon,
-  EyeIcon
+  MagnifyingGlassIcon
 } from '@heroicons/react/24/outline';
-import { ImageIcon, Globe } from 'lucide-react';
+import { ImageIcon, Globe, TrendingUp, DollarSign, Users, BarChart3 } from 'lucide-react';
 import { ConfirmationModal } from '@/components/ui/confirmation-modal';
 
 interface Service {
@@ -60,7 +58,29 @@ interface Client {
 
 
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState<'services' | 'employees' | 'agenda' | 'configurations' | 'clients'>('services');
+  // CSS para garantir uso de toda a largura
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      .dashboard-container {
+        width: 100vw !important;
+        max-width: none !important;
+      }
+        .dashboard-content {
+          width: calc(100vw - 288px) !important;
+          max-width: none !important;
+          min-width: 0 !important;
+          flex: 1 !important;
+        }
+    `;
+    document.head.appendChild(style);
+    return () => {
+      if (document.head.contains(style)) {
+        document.head.removeChild(style);
+      }
+    };
+  }, []);
+  const [activeTab, setActiveTab] = useState<'services' | 'employees' | 'agenda' | 'configurations' | 'clients' | 'subscriptions' | 'plan'>('services');
   const [services, setServices] = useState<Service[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -69,6 +89,26 @@ export default function AdminDashboard() {
   const [days, setDays] = useState<number>(7);
   const [filterEmp, setFilterEmp] = useState<string>('all');
   const [filterSvc, setFilterSvc] = useState<string>('all');
+
+  // Função para obter horários de funcionamento do dia selecionado
+  const getOperatingHours = () => {
+    const [year, month, day] = selectedDate.split('-');
+    const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    const dayOfWeek = date.getDay(); // 0 = domingo, 1 = segunda, etc.
+
+    const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const dayName = dayNames[dayOfWeek];
+    const dayConfig = configurations.openingHours[dayName as keyof typeof configurations.openingHours];
+
+    if (dayConfig.closed) {
+      return { startHour: 0, endHour: 0, isClosed: true };
+    }
+
+    const startHour = parseInt(dayConfig.open.split(':')[0]);
+    const endHour = parseInt(dayConfig.close.split(':')[0]);
+
+    return { startHour, endHour, isClosed: false };
+  };
 
   // Estados para configurações
   const [configurations, setConfigurations] = useState({
@@ -93,6 +133,8 @@ export default function AdminDashboard() {
   });
   const [savingConfig, setSavingConfig] = useState(false);
   const [userInfo, setUserInfo] = useState<{ tenantId: string; barbershopId: string } | null>(null);
+  const [isLoadingData, setIsLoadingData] = useState(false);
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
 
   // Estados para modais
   const [showServiceModal, setShowServiceModal] = useState(false);
@@ -141,37 +183,86 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     if (userInfo) {
-      loadServices();
-      loadEmployees();
-      loadAppointments();
-      loadClients();
-      loadConfigurations();
+      setIsLoadingData(true);
+
+      // Carregar todos os dados em paralelo para melhor performance
+      Promise.all([
+        loadServices(),
+        loadEmployees(),
+        loadAppointments(),
+        loadClients(),
+        loadConfigurations()
+      ]).then(() => {
+        setIsLoadingData(false);
+        setLastUpdate(new Date());
+      }).catch((error) => {
+        console.error('Erro ao carregar dados:', error);
+        setIsLoadingData(false);
+      });
     }
   }, [userInfo]);
 
+  // Função para atualizar dados manualmente
+  const refreshData = async () => {
+    if (!userInfo) return;
+
+    setIsLoadingData(true);
+    try {
+      await Promise.all([
+        loadServices(),
+        loadEmployees(),
+        loadAppointments(),
+        loadClients(),
+        loadConfigurations()
+      ]);
+      setLastUpdate(new Date());
+    } catch (error) {
+      console.error('Erro ao atualizar dados:', error);
+    } finally {
+      setIsLoadingData(false);
+    }
+  };
+
+  // Função específica para atualizar agenda
+  const refreshAgenda = async () => {
+    if (!userInfo) return;
+
+    setIsLoadingData(true);
+    try {
+      await Promise.all([
+        loadAppointments(),
+        loadConfigurations()
+      ]);
+      const updateTime = new Date();
+      setLastUpdate(updateTime);
+      console.log('Agenda atualizada em:', updateTime.toLocaleString('pt-BR'));
+      toast.success('Agenda atualizada!');
+    } catch (error) {
+      console.error('Erro ao atualizar agenda:', error);
+      toast.error('Erro ao atualizar agenda');
+    } finally {
+      setIsLoadingData(false);
+    }
+  };
+
   // Funções para carregar dados reais
   const loadUserInfo = async () => {
-    console.log('🔍 loadUserInfo: Iniciando carregamento de informações do usuário');
     try {
       const response = await fetch('/api/v1/auth/me', {
         credentials: 'include'
       });
-      console.log('📡 loadUserInfo: Resposta da API /me:', response.status, response.ok);
 
       if (response.ok) {
         const data = await response.json();
-        console.log('📋 loadUserInfo: Dados do usuário:', data);
         setUserInfo({
           tenantId: data.user.tenantId,
           barbershopId: data.user.barbershopId
         });
-        console.log('✅ loadUserInfo: userInfo definido com sucesso');
       } else {
-        const errorData = await response.json();
-        console.error('❌ loadUserInfo: Erro na API /me:', errorData);
+        console.error('Erro ao carregar informações do usuário');
       }
     } catch (error) {
-      console.error('❌ loadUserInfo: Erro ao carregar informações do usuário:', error);
+      console.error('Erro ao carregar informações do usuário:', error);
     }
   };
 
@@ -181,13 +272,13 @@ export default function AdminDashboard() {
     try {
       const response = await fetch('/api/v1/services', {
         headers: {
-          'x-tenant-id': userInfo.tenantId
+          'x-tenant-id': userInfo?.tenantId || ''
         },
         credentials: 'include'
       });
+
       if (response.ok) {
         const data = await response.json();
-        console.log('📋 Dados recebidos da API:', data);
         const mappedServices = data.map((s: any) => ({
           id: s.id,
           name: s.name,
@@ -196,10 +287,9 @@ export default function AdminDashboard() {
           description: '',
           is_active: s.isActive
         }));
-        console.log('🔄 Serviços mapeados:', mappedServices);
         setServices(mappedServices);
       } else {
-        console.error('❌ Erro na resposta da API:', response.status, response.statusText);
+        console.error('Erro ao carregar serviços');
       }
     } catch (error) {
       console.error('Erro ao carregar serviços:', error);
@@ -212,7 +302,7 @@ export default function AdminDashboard() {
     try {
       const response = await fetch('/api/v1/employees', {
         headers: {
-          'x-tenant-id': userInfo.tenantId
+          'x-tenant-id': userInfo?.tenantId || ''
         },
         credentials: 'include'
       });
@@ -250,7 +340,7 @@ export default function AdminDashboard() {
 
       const response = await fetch(`/api/v1/appointments/list?${qs.toString()}`, {
         headers: {
-          'x-tenant-id': userInfo.tenantId
+          'x-tenant-id': userInfo?.tenantId || ''
         },
         credentials: 'include'
       });
@@ -273,13 +363,12 @@ export default function AdminDashboard() {
     try {
       const response = await fetch('/api/v1/clients', {
         headers: {
-          'x-tenant-id': userInfo.tenantId
+          'x-tenant-id': userInfo?.tenantId || ''
         },
         credentials: 'include'
       });
       if (response.ok) {
         const data = await response.json();
-        console.log('📋 Dados de clientes recebidos:', data);
         setClients(data.map((c: any) => ({
           id: c.id,
           name: c.name,
@@ -320,10 +409,10 @@ export default function AdminDashboard() {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-tenant-id': 'cmffwm0j20000uaoo2c4ugtvx'
+            'x-tenant-id': userInfo?.tenantId || ''
           },
           body: JSON.stringify({
-            barbershopId: 'cmffwm0ks0002uaoot2x03802', // ID real da barbearia do banco
+            barbershopId: userInfo?.barbershopId || '',
             name: updatedServiceForm.name,
             durationMin: updatedServiceForm.duration_min,
             priceCents: updatedServiceForm.price_cents,
@@ -376,7 +465,7 @@ export default function AdminDashboard() {
         const response = await fetch(`/api/v1/services?id=${serviceId}`, {
           method: 'DELETE',
           headers: {
-            'x-tenant-id': 'cmffwm0j20000uaoo2c4ugtvx'
+            'x-tenant-id': userInfo?.tenantId || ''
           }
         });
 
@@ -406,7 +495,7 @@ export default function AdminDashboard() {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
-            'x-tenant-id': 'cmffwm0j20000uaoo2c4ugtvx'
+            'x-tenant-id': userInfo?.tenantId || ''
           },
           body: JSON.stringify(employeeForm)
         });
@@ -422,11 +511,11 @@ export default function AdminDashboard() {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-tenant-id': 'cmffwm0j20000uaoo2c4ugtvx'
+            'x-tenant-id': userInfo?.tenantId || ''
           },
           body: JSON.stringify({
             ...employeeForm,
-            barbershopId: 'cmffwm0ks0002uaoot2x03802' // ID da barbearia do tenant
+            barbershopId: userInfo?.barbershopId || ''
           })
         });
 
@@ -475,7 +564,7 @@ export default function AdminDashboard() {
       const response = await fetch(`/api/v1/employees/${employeeToDelete.id}`, {
         method: 'DELETE',
         headers: {
-          'x-tenant-id': 'cmffwm0j20000uaoo2c4ugtvx'
+          'x-tenant-id': userInfo?.tenantId || ''
         }
       });
 
@@ -581,16 +670,11 @@ export default function AdminDashboard() {
 
   // Carregar configurações
   const loadConfigurations = async () => {
-    if (!userInfo) {
-      console.log('❌ loadConfigurations: userInfo não disponível');
-      return;
-    }
-
-    console.log('🔍 loadConfigurations: Carregando configurações para tenant:', userInfo.tenantId);
+    if (!userInfo) return;
 
     try {
       const response = await fetch('/api/v1/barbershop/settings', {
-        headers: { 'x-tenant-id': userInfo.tenantId },
+        headers: { 'x-tenant-id': userInfo?.tenantId || '' },
         credentials: 'include'
       });
 
@@ -618,7 +702,8 @@ export default function AdminDashboard() {
         openingHours: workingHours || prev.openingHours
       }));
 
-      console.log('✅ Configurações carregadas:', data);
+
+
     } catch (error) {
       console.error('Erro ao carregar configurações:', error);
       // Não mostrar toast de erro para não incomodar o usuário
@@ -634,7 +719,7 @@ export default function AdminDashboard() {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'x-tenant-id': userInfo.tenantId
+          'x-tenant-id': userInfo?.tenantId || ''
         },
         credentials: 'include',
         body: JSON.stringify({
@@ -654,8 +739,6 @@ export default function AdminDashboard() {
         throw new Error(errorData.message || 'Erro ao salvar configurações');
       }
 
-      const result = await response.json();
-      console.log('✅ Configurações salvas:', result);
       toast.success('Configurações salvas com sucesso!');
     } catch (error) {
       console.error('Erro ao salvar configurações:', error);
@@ -669,894 +752,1520 @@ export default function AdminDashboard() {
 
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Dashboard Admin</h1>
-              <p className="text-gray-600 mt-1">Gerencie sua barbearia</p>
-            </div>
+    <div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex dashboard-container">
+      {/* Menu Lateral Vertical */}
+      <div className="w-72 bg-slate-800/95 backdrop-blur-sm shadow-2xl border-r border-slate-700/50 flex flex-col flex-shrink-0">
+        {/* Header do Menu */}
+        <div className="p-6 border-b border-slate-700/50">
+          <div className="text-center">
+            <h1 className="text-xl font-bold text-white">
+              {configurations.name}
+            </h1>
+            <p className="text-slate-400 text-sm">Dashboard Admin</p>
           </div>
         </div>
-      </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Tabs */}
-        <div className="border-b border-gray-200 mb-8">
-          <nav className="-mb-px flex space-x-8">
-            <button
-              onClick={() => setActiveTab('services')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'services'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-            >
-              <CogIcon className="h-5 w-5 inline mr-2" />
-              Serviços
-            </button>
-            <button
-              onClick={() => setActiveTab('employees')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'employees'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-            >
-              <UserGroupIcon className="h-5 w-5 inline mr-2" />
-              Colaboradores
-            </button>
-            <button
-              onClick={() => setActiveTab('agenda')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'agenda'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-            >
-              <CalendarDaysIcon className="h-5 w-5 inline mr-2" />
-              Agenda
-            </button>
-            <button
-              onClick={() => setActiveTab('configurations')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'configurations'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-            >
-              <CogIcon className="h-5 w-5 inline mr-2" />
-              Configurações
-            </button>
-            <button
-              onClick={() => setActiveTab('clients')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'clients'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-            >
-              <UsersIcon className="h-5 w-5 inline mr-2" />
-              Clientes
-            </button>
-          </nav>
+        {/* Status e Loading */}
+        <div className="px-6 py-4 border-b border-slate-700/50">
+          {isLoadingData && (
+            <div className="flex items-center text-indigo-400 bg-indigo-900/20 px-4 py-3 rounded-lg mb-3">
+              <svg className="animate-spin -ml-1 mr-3 h-4 w-4 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <span className="text-sm font-medium">Carregando dados...</span>
+            </div>
+          )}
+
+          <div className="flex items-center space-x-2 bg-emerald-900/20 px-4 py-3 rounded-lg">
+            <div className="w-2 h-2 bg-emerald-400 rounded-full"></div>
+            <span className="text-sm text-emerald-400 font-medium">Sistema Online</span>
+          </div>
         </div>
 
-        {/* Tab Content */}
-        {activeTab === 'services' && (
-          <div>
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-900">Serviços</h2>
+        {/* Menu de Navegação Vertical */}
+        <nav className="flex-1 px-6 py-6 space-y-3">
+          {[
+            { id: 'services', name: 'Serviços', icon: CogIcon, color: 'indigo', description: 'Gerencie seus serviços' },
+            { id: 'employees', name: 'Funcionários', icon: CogIcon, color: 'emerald', description: 'Equipe e colaboradores' },
+            { id: 'agenda', name: 'Agenda', icon: CogIcon, color: 'blue', description: 'Agendamentos e horários' },
+            { id: 'clients', name: 'Clientes', icon: CogIcon, color: 'amber', description: 'Base de clientes' },
+            { id: 'subscriptions', name: 'Assinaturas', icon: CogIcon, color: 'purple', description: 'Planos para clientes' },
+            { id: 'plan', name: 'Meu Plano', icon: CogIcon, color: 'violet', description: 'Sua assinatura Noxora' },
+            { id: 'configurations', name: 'Configurações', icon: CogIcon, color: 'slate', description: 'Configurações gerais' }
+          ].map((tab) => {
+            const isActive = activeTab === tab.id;
+            const colorClasses = {
+              indigo: isActive ? 'bg-indigo-600 text-white shadow-indigo-500/20' : 'text-slate-300 hover:bg-slate-700/50',
+              emerald: isActive ? 'bg-emerald-600 text-white shadow-emerald-500/20' : 'text-slate-300 hover:bg-slate-700/50',
+              blue: isActive ? 'bg-blue-600 text-white shadow-blue-500/20' : 'text-slate-300 hover:bg-slate-700/50',
+              amber: isActive ? 'bg-amber-600 text-white shadow-amber-500/20' : 'text-slate-300 hover:bg-slate-700/50',
+              purple: isActive ? 'bg-purple-600 text-white shadow-purple-500/20' : 'text-slate-300 hover:bg-slate-700/50',
+              violet: isActive ? 'bg-violet-600 text-white shadow-violet-500/20' : 'text-slate-300 hover:bg-slate-700/50',
+              slate: isActive ? 'bg-slate-600 text-white shadow-slate-500/20' : 'text-slate-300 hover:bg-slate-700/50'
+            };
+
+            return (
               <button
-                onClick={() => setShowServiceModal(true)}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center"
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`w-full flex items-center space-x-4 px-6 py-5 rounded-xl font-medium transition-all duration-200 group ${colorClasses[tab.color as keyof typeof colorClasses]
+                  } ${isActive ? 'shadow-lg transform scale-105' : 'hover:scale-105'}`}
               >
-                <PlusIcon className="h-5 w-5 mr-2" />
-                Novo Serviço
-              </button>
-            </div>
-
-            <div className="bg-white shadow rounded-lg overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Serviço
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Duração
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Preço
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Ações
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {services.map((service) => (
-                    <tr key={service.id}>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div>
-                          <div className="text-sm font-medium text-gray-900">{service.name}</div>
-                          {service.description && (
-                            <div className="text-sm text-gray-500">{service.description}</div>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {formatDuration(service.duration_min)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {formatPrice(service.price_cents)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${service.is_active
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-red-100 text-red-800'
-                          }`}>
-                          {service.is_active ? 'Ativo' : 'Inativo'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <button
-                          onClick={() => handleEditService(service)}
-                          className="text-blue-600 hover:text-blue-900 mr-3"
-                        >
-                          <PencilIcon className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteService(service.id)}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          <TrashIcon className="h-4 w-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'employees' && (
-          <div>
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-900">Colaboradores</h2>
-              <button
-                onClick={() => setShowEmployeeModal(true)}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center"
-              >
-                <PlusIcon className="h-5 w-5 mr-2" />
-                Novo Funcionário
-              </button>
-            </div>
-
-            <div className="bg-white shadow rounded-lg overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Funcionário
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Cargo
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Contato
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Ações
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {employees.map((employee) => (
-                    <tr key={employee.id}>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center mr-3">
-                            <span className="text-sm font-medium text-gray-700">
-                              {employee.name.charAt(0)}
-                            </span>
-                          </div>
-                          <div className="text-sm font-medium text-gray-900">{employee.name}</div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {employee.role}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{employee.email}</div>
-                        <div className="text-sm text-gray-500">{employee.phone}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${employee.active
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-red-100 text-red-800'
-                          }`}>
-                          {employee.active ? 'Ativo' : 'Inativo'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <button
-                          onClick={() => handleEditEmployee(employee)}
-                          className="text-blue-600 hover:text-blue-900 mr-3"
-                        >
-                          <PencilIcon className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteEmployee(employee)}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          <TrashIcon className="h-4 w-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'agenda' && (
-          <div>
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-900">Agenda</h2>
-            </div>
-
-            {/* Filtros */}
-            <div className="bg-white shadow rounded-lg p-6 mb-6">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Data Inicial</label>
-                  <input
-                    type="date"
-                    value={selectedDate}
-                    onChange={(e) => setSelectedDate(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Dias</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="30"
-                    value={days}
-                    onChange={(e) => setDays(Math.max(1, Math.min(30, Number(e.target.value) || 7)))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Funcionário</label>
-                  <select
-                    value={filterEmp}
-                    onChange={(e) => setFilterEmp(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="all">Todos os funcionários</option>
-                    {employees.map(emp => (
-                      <option key={emp.id} value={emp.id}>{emp.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Serviço</label>
-                  <select
-                    value={filterSvc}
-                    onChange={(e) => setFilterSvc(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="all">Todos os serviços</option>
-                    {services.map(svc => (
-                      <option key={svc.id} value={svc.id}>{svc.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div className="mt-4">
-                <button
-                  onClick={loadAppointments}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  Recarregar
-                </button>
-              </div>
-            </div>
-
-            {/* Lista de agendamentos */}
-            <div className="space-y-4">
-              {Array.from({ length: days }).map((_, i) => {
-                const currentDate = new Date(selectedDate);
-                currentDate.setDate(currentDate.getDate() + i);
-                const dateKey = currentDate.toISOString().substring(0, 10);
-                const dayAppointments = appointments.filter(apt =>
-                  apt.startAt.substring(0, 10) === dateKey
-                ).sort((a, b) => a.startAt.localeCompare(b.startAt));
-
-                return (
-                  <div key={dateKey} className="bg-white shadow rounded-lg overflow-hidden">
-                    <div className="px-6 py-4 border-b border-gray-200">
-                      <h3 className="text-lg font-medium text-gray-900">
-                        {formatDate(dateKey)} — {dayAppointments.length} agendamentos
-                      </h3>
-                    </div>
-                    <div className="p-6">
-                      {dayAppointments.length === 0 ? (
-                        <div className="text-sm text-gray-500">Sem agendamentos</div>
-                      ) : (
-                        <div className="space-y-3">
-                          {dayAppointments.map(appointment => (
-                            <div key={appointment.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
-                              <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-4">
-                                <div>
-                                  <div className="font-medium text-gray-900">
-                                    {formatTime(appointment.startAt)} - {formatTime(appointment.endAt)}
-                                  </div>
-                                </div>
-                                <div>
-                                  <div className="font-medium text-gray-900">
-                                    {appointment.clients?.name || 'Cliente'}
-                                  </div>
-                                  <div className="text-sm text-gray-500">
-                                    {appointment.clients?.phone || ''}
-                                  </div>
-                                </div>
-                                <div>
-                                  <div className="text-sm text-gray-900">
-                                    {appointment.service?.name || 'Serviço'}
-                                  </div>
-                                  <div className="text-sm text-gray-500">
-                                    {appointment.employee?.name || 'Funcionário'}
-                                  </div>
-                                </div>
-                                <div className="flex items-center justify-between">
-                                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(appointment.status)}`}>
-                                    {getStatusText(appointment.status)}
-                                  </span>
-                                  <button
-                                    onClick={() => {
-                                      // Implementar cancelamento
-                                      console.log('Cancelar agendamento:', appointment.id);
-                                    }}
-                                    className="text-red-600 hover:text-red-900 text-sm"
-                                  >
-                                    Cancelar
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'configurations' && (
-          <div>
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-900">Configurações da Barbearia</h2>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Informações Básicas */}
-              <div className="bg-white shadow rounded-lg p-6">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Informações Básicas</h3>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Nome da Barbearia</label>
-                    <input
-                      type="text"
-                      value={configurations.name}
-                      onChange={(e) => handleSlugChange(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Digite o nome da barbearia"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Slug (URL)</label>
-                    <div className="flex">
-                      <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 text-gray-500 text-sm">
-                        noxoraa.vercel.app/b/
-                      </span>
-                      <input
-                        type="text"
-                        value={configurations.slug}
-                        onChange={(e) => handleConfigChange('slug', e.target.value)}
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-r-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="slug-da-barbearia"
-                      />
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      O slug é gerado automaticamente baseado no nome, mas você pode editá-lo
-                    </p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
-                    <textarea
-                      value={configurations.description}
-                      onChange={(e) => handleConfigChange('description', e.target.value)}
-                      rows={3}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Descreva sua barbearia"
-                    />
+                <tab.icon className="w-6 h-6" />
+                <div className="flex-1 text-left">
+                  <div className="font-semibold">{tab.name}</div>
+                  <div className={`text-xs ${isActive ? 'text-white/80' : 'text-gray-500'}`}>
+                    {tab.description}
                   </div>
                 </div>
-              </div>
-
-              {/* Contato */}
-              <div className="bg-white shadow rounded-lg p-6">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Contato</h3>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Endereço</label>
-                    <input
-                      type="text"
-                      value={configurations.address}
-                      onChange={(e) => handleConfigChange('address', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Rua, número - Bairro, Cidade"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Telefone</label>
-                    <input
-                      type="text"
-                      value={configurations.phone}
-                      onChange={(e) => handleConfigChange('phone', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="(11) 99999-9999"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                    <input
-                      type="email"
-                      value={configurations.email}
-                      onChange={(e) => handleConfigChange('email', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="contato@barbearia.com"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Instagram</label>
-                    <input
-                      type="text"
-                      value={configurations.instagram}
-                      onChange={(e) => handleConfigChange('instagram', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="@barbearia"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Logo e Banner */}
-              <div className="bg-white shadow rounded-lg p-6">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Logo da Barbearia</h3>
-                <div className="space-y-4">
-                  <div className="flex items-center space-x-4">
-                    <div className="w-20 h-20 bg-gray-100 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300">
-                      <ImageIcon className="h-8 w-8 text-gray-400" />
-                    </div>
-                    <div className="flex-1">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Upload do Logo</label>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => handleFileChange('logoFile', e.target.files?.[0] || null)}
-                        className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">PNG, JPG até 2MB. Recomendado: 200x200px</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Banner */}
-              <div className="bg-white shadow rounded-lg p-6">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Banner da Barbearia</h3>
-                <div className="space-y-4">
-                  <div className="w-full h-32 bg-gray-100 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300">
-                    <div className="text-center">
-                      <ImageIcon className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-                      <p className="text-sm text-gray-500">Banner Preview</p>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Upload do Banner</label>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => handleFileChange('bannerFile', e.target.files?.[0] || null)}
-                      className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">PNG, JPG até 5MB. Recomendado: 1200x400px</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Horário de Funcionamento */}
-              <div className="bg-white shadow rounded-lg p-6 lg:col-span-2">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Horário de Funcionamento</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'].map((day, index) => (
-                    <div key={day} className="flex items-center space-x-2">
-                      <div className="w-20 text-sm font-medium text-gray-700">{day}</div>
-                      <input
-                        type="time"
-                        defaultValue={index === 6 ? "00:00" : "09:00"}
-                        className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
-                      />
-                      <span className="text-gray-500">-</span>
-                      <input
-                        type="time"
-                        defaultValue={index === 6 ? "00:00" : index === 5 ? "14:00" : "18:00"}
-                        className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
-                      />
-                      <input
-                        type="checkbox"
-                        defaultChecked={index === 6 ? false : true}
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Preview da URL Pública */}
-              <div className="bg-white shadow rounded-lg p-6 lg:col-span-2">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Preview da URL Pública</h3>
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <div className="flex items-center space-x-2 mb-2">
-                    <Globe className="h-4 w-4 text-gray-500" />
-                    <span className="text-sm font-medium text-gray-700">URL da sua barbearia:</span>
-                  </div>
-                  <code className="text-sm text-blue-600 bg-blue-50 px-2 py-1 rounded">
-                    https://noxoraa.vercel.app/b/{configurations.slug}
-                  </code>
-                  <p className="text-xs text-gray-500 mt-2">
-                    Esta é a URL que seus clientes usarão para fazer agendamentos.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-6 flex justify-end">
-              <button
-                onClick={saveConfigurations}
-                disabled={savingConfig}
-                className={`px-6 py-2 rounded-lg transition-colors flex items-center space-x-2 ${savingConfig
-                  ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
-                  : 'bg-blue-600 text-white hover:bg-blue-700'
-                  }`}
-              >
-                {savingConfig ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    <span>Salvando...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Salvar Configurações</span>
-                  </>
+                {isActive && (
+                  <div className="w-2 h-2 bg-white rounded-full"></div>
                 )}
               </button>
-            </div>
-          </div>
-        )}
+            );
+          })}
+        </nav>
 
-        {activeTab === 'clients' && (
-          <div>
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-900">Clientes</h2>
+        {/* Footer do Menu */}
+        <div className="p-6 border-t border-slate-700/50">
+          <div className="bg-gradient-to-r from-slate-700/50 to-slate-600/50 rounded-xl p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-sm text-slate-300">Última atualização</div>
               <button
-                onClick={loadClients}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                onClick={refreshData}
+                disabled={isLoadingData}
+                className="text-slate-400 hover:text-slate-300 transition-colors disabled:opacity-50"
+                title="Atualizar dados"
               >
-                Recarregar
+                <svg
+                  className={`w-4 h-4 ${isLoadingData ? 'animate-spin' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
               </button>
             </div>
-
-            {/* Debug info */}
-            <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <p className="text-sm text-yellow-800">
-                <strong>Debug:</strong> Total de clientes carregados: {clients.length}
-              </p>
-            </div>
-
-            <div className="bg-white shadow rounded-lg overflow-hidden">
-              {clients.length === 0 ? (
-                <div className="p-8 text-center">
-                  <UsersIcon className="mx-auto h-12 w-12 text-gray-400" />
-                  <h3 className="mt-2 text-sm font-medium text-gray-900">Nenhum cliente encontrado</h3>
-                  <p className="mt-1 text-sm text-gray-500">
-                    Os clientes aparecerão aqui quando fizerem agendamentos.
-                  </p>
-                </div>
+            <div className="text-xs text-slate-400">
+              {lastUpdate ? (
+                <>
+                  {lastUpdate.toLocaleDateString('pt-BR', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric'
+                  })} às {lastUpdate.toLocaleTimeString('pt-BR', {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  })}
+                </>
               ) : (
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Cliente
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Email
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Telefone
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Data de Cadastro
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Ações
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {clients.map((client) => (
-                      <tr key={client.id}>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center mr-3">
-                              <span className="text-sm font-medium text-gray-700">
-                                {client.name.charAt(0).toUpperCase()}
-                              </span>
-                            </div>
-                            <div className="text-sm font-medium text-gray-900">{client.name}</div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {client.email}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {client.phone}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {formatDate(client.createdAt)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          <button className="text-blue-600 hover:text-blue-900 mr-3">
-                            <PencilIcon className="h-4 w-4" />
-                          </button>
-                          <button className="text-red-600 hover:text-red-900">
-                            <TrashIcon className="h-4 w-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                'Carregando...'
               )}
             </div>
           </div>
-        )}
-
+        </div>
       </div>
 
-      {/* Modal de Serviço */}
-      {showServiceModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-            <div className="mt-3">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">
-                {editingService ? 'Editar Serviço' : 'Novo Serviço'}
-              </h3>
-              <form onSubmit={handleServiceSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Nome do Serviço
-                  </label>
-                  <input
-                    type="text"
-                    value={serviceForm.name}
-                    onChange={(e) => setServiceForm(prev => ({ ...prev, name: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Duração (minutos)
-                  </label>
-                  <input
-                    type="number"
-                    value={serviceForm.duration_min}
-                    onChange={(e) => setServiceForm(prev => ({ ...prev, duration_min: parseInt(e.target.value) || 0 }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    min="15"
-                    step="15"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Preço (R$)
-                  </label>
-                  <input
-                    type="text"
-                    value={serviceForm.price_reais}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      setServiceForm(prev => ({
-                        ...prev,
-                        price_reais: value,
-                        price_cents: reaisToCents(value)
-                      }));
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="0,00"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Descrição
-                  </label>
-                  <textarea
-                    value={serviceForm.description}
-                    onChange={(e) => setServiceForm(prev => ({ ...prev, description: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    rows={3}
-                  />
-                </div>
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={serviceForm.is_active}
-                    onChange={(e) => setServiceForm(prev => ({ ...prev, is_active: e.target.checked }))}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  />
-                  <label className="ml-2 block text-sm text-gray-900">
-                    Serviço ativo
-                  </label>
-                </div>
-                <div className="flex justify-end space-x-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowServiceModal(false);
-                      setEditingService(null);
-                      setServiceForm({ name: '', duration_min: 30, price_cents: 0, price_reais: '0,00', description: '', is_active: true });
-                    }}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
-                  >
-                    {editingService ? 'Atualizar' : 'Criar'}
-                  </button>
-                </div>
-              </form>
+      {/* Conteúdo Principal */}
+      <div className="flex-1 flex flex-col">
+        {/* Header do Conteúdo */}
+        <div className="bg-slate-800/80 backdrop-blur-sm shadow-lg border-b border-slate-700/50">
+          <div className="px-8 py-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-3xl font-bold text-white">
+                  {activeTab === 'services' && 'Serviços'}
+                  {activeTab === 'employees' && 'Funcionários'}
+                  {activeTab === 'agenda' && 'Agenda'}
+                  {activeTab === 'clients' && 'Clientes'}
+                  {activeTab === 'subscriptions' && 'Assinaturas'}
+                  {activeTab === 'plan' && 'Meu Plano'}
+                  {activeTab === 'configurations' && 'Configurações'}
+                </h2>
+                <p className="text-slate-400 mt-1">
+                  {activeTab === 'services' && 'Gerencie os serviços oferecidos pela sua barbearia'}
+                  {activeTab === 'employees' && 'Administre sua equipe de funcionários'}
+                  {activeTab === 'agenda' && 'Visualize e gerencie os agendamentos'}
+                  {activeTab === 'clients' && 'Controle sua base de clientes'}
+                  {activeTab === 'subscriptions' && 'Configure planos de assinatura para seus clientes'}
+                  {activeTab === 'plan' && 'Gerencie sua assinatura da plataforma Noxora'}
+                  {activeTab === 'configurations' && 'Configure as opções da sua barbearia'}
+                </p>
+              </div>
             </div>
           </div>
         </div>
-      )}
 
-      {/* Modal de Funcionário */}
-      {showEmployeeModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-            <div className="mt-3">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">
-                {editingEmployee ? 'Editar Funcionário' : 'Novo Funcionário'}
-              </h3>
-              <form onSubmit={handleEmployeeSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Nome Completo
-                  </label>
-                  <input
-                    type="text"
-                    value={employeeForm.name}
-                    onChange={(e) => setEmployeeForm(prev => ({ ...prev, name: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Cargo
-                  </label>
-                  <select
-                    value={employeeForm.role}
-                    onChange={(e) => setEmployeeForm(prev => ({ ...prev, role: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="BARBER">Barbeiro</option>
-                    <option value="RECEPTIONIST">Recepcionista</option>
-                    <option value="MANAGER">Gerente</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    value={employeeForm.email}
-                    onChange={(e) => setEmployeeForm(prev => ({ ...prev, email: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Telefone
-                  </label>
-                  <input
-                    type="tel"
-                    value={employeeForm.phone}
-                    onChange={(e) => setEmployeeForm(prev => ({ ...prev, phone: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={employeeForm.active}
-                    onChange={(e) => setEmployeeForm(prev => ({ ...prev, active: e.target.checked }))}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  />
-                  <label className="ml-2 block text-sm text-gray-900">
-                    Funcionário ativo
-                  </label>
-                </div>
-                <div className="flex justify-end space-x-3 pt-4">
+        {/* Área de Conteúdo */}
+        <div className="flex-1 p-10 overflow-y-auto dashboard-content">
+          <div className="w-full">
+            {/* Tab Content */}
+            {activeTab === 'services' && (
+              <div>
+                <div className="flex justify-between items-center mb-8">
+                  <h2 className="text-3xl font-bold text-white">Serviços</h2>
                   <button
-                    type="button"
-                    onClick={() => {
-                      setShowEmployeeModal(false);
-                      setEditingEmployee(null);
-                      setEmployeeForm({ name: '', role: 'BARBER', email: '', phone: '', active: true });
-                    }}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
+                    onClick={() => setShowServiceModal(true)}
+                    className="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 flex items-center font-medium transition-colors"
                   >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
-                  >
-                    {editingEmployee ? 'Atualizar' : 'Criar'}
+                    <PlusIcon className="h-5 w-5 mr-2" />
+                    Novo Serviço
                   </button>
                 </div>
-              </form>
-            </div>
+
+                <div className="bg-slate-800 shadow-lg rounded-xl overflow-hidden border border-slate-700">
+                  <table className="w-full divide-y divide-gray-200">
+                    <thead className="bg-slate-700">
+                      <tr>
+                        <th className="px-8 py-4 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                          Serviço
+                        </th>
+                        <th className="px-8 py-4 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                          Duração
+                        </th>
+                        <th className="px-8 py-4 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                          Preço
+                        </th>
+                        <th className="px-8 py-4 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                          Status
+                        </th>
+                        <th className="px-8 py-4 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                          Ações
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-slate-800 divide-y divide-slate-700">
+                      {services.map((service) => (
+                        <tr key={service.id}>
+                          <td className="px-8 py-5 whitespace-nowrap">
+                            <div>
+                              <div className="text-sm font-medium text-white">{service.name}</div>
+                              {service.description && (
+                                <div className="text-sm text-slate-400">{service.description}</div>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-8 py-5 whitespace-nowrap text-sm text-white">
+                            {formatDuration(service.duration_min)}
+                          </td>
+                          <td className="px-8 py-5 whitespace-nowrap text-sm text-white">
+                            {formatPrice(service.price_cents)}
+                          </td>
+                          <td className="px-8 py-5 whitespace-nowrap">
+                            <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${service.is_active
+                              ? 'bg-emerald-900/30 text-emerald-400 border border-emerald-500/20'
+                              : 'bg-red-900/30 text-red-400 border border-red-500/20'
+                              }`}>
+                              {service.is_active ? 'Ativo' : 'Inativo'}
+                            </span>
+                          </td>
+                          <td className="px-8 py-5 whitespace-nowrap text-sm font-medium">
+                            <button
+                              onClick={() => handleEditService(service)}
+                              className="text-indigo-400 hover:text-indigo-300 mr-3 transition-colors"
+                            >
+                              <PencilIcon className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteService(service.id)}
+                              className="text-red-400 hover:text-red-300 transition-colors"
+                            >
+                              <TrashIcon className="h-4 w-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'employees' && (
+              <div>
+                <div className="flex justify-between items-center mb-8">
+                  <h2 className="text-3xl font-bold text-white">Colaboradores</h2>
+                  <button
+                    onClick={() => setShowEmployeeModal(true)}
+                    className="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 flex items-center font-medium transition-colors"
+                  >
+                    <PlusIcon className="h-5 w-5 mr-2" />
+                    Novo Funcionário
+                  </button>
+                </div>
+
+                <div className="bg-slate-800 shadow-lg rounded-xl overflow-hidden border border-slate-700">
+                  <table className="w-full divide-y divide-gray-200">
+                    <thead className="bg-slate-700">
+                      <tr>
+                        <th className="px-8 py-4 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                          Funcionário
+                        </th>
+                        <th className="px-8 py-4 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                          Cargo
+                        </th>
+                        <th className="px-8 py-4 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                          Contato
+                        </th>
+                        <th className="px-8 py-4 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                          Status
+                        </th>
+                        <th className="px-8 py-4 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                          Ações
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-slate-800 divide-y divide-slate-700">
+                      {employees.map((employee) => (
+                        <tr key={employee.id}>
+                          <td className="px-8 py-5 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center mr-3">
+                                <span className="text-sm font-medium text-gray-700">
+                                  {employee.name.charAt(0)}
+                                </span>
+                              </div>
+                              <div className="text-sm font-medium text-gray-900">{employee.name}</div>
+                            </div>
+                          </td>
+                          <td className="px-8 py-5 whitespace-nowrap text-sm text-white">
+                            {employee.role}
+                          </td>
+                          <td className="px-8 py-5 whitespace-nowrap">
+                            <div className="text-sm text-gray-900">{employee.email}</div>
+                            <div className="text-sm text-gray-500">{employee.phone}</div>
+                          </td>
+                          <td className="px-8 py-5 whitespace-nowrap">
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${employee.active
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-red-100 text-red-800'
+                              }`}>
+                              {employee.active ? 'Ativo' : 'Inativo'}
+                            </span>
+                          </td>
+                          <td className="px-8 py-5 whitespace-nowrap text-sm font-medium">
+                            <button
+                              onClick={() => handleEditEmployee(employee)}
+                              className="text-indigo-400 hover:text-indigo-300 mr-3 transition-colors"
+                            >
+                              <PencilIcon className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteEmployee(employee)}
+                              className="text-red-400 hover:text-red-300 transition-colors"
+                            >
+                              <TrashIcon className="h-4 w-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'agenda' && (
+              <div className="flex h-full w-full">
+                {/* Sidebar com Calendário e Filtros */}
+                <div className="w-80 bg-slate-800 border-r border-slate-700 p-4 space-y-4">
+                  {/* Calendário */}
+                  <div className="bg-slate-700 rounded-lg p-3">
+                    <div className="text-center mb-3">
+                      <h3 className="text-base font-semibold text-white">
+                        setembro de 2025
+                      </h3>
+                    </div>
+                    <div className="grid grid-cols-7 gap-1 text-xs">
+                      {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(day => (
+                        <div key={day} className="text-slate-400 text-center py-1 text-xs">{day}</div>
+                      ))}
+                      {(() => {
+                        // Forçar setembro de 2025 para o calendário
+                        const year = 2025;
+                        const month = 8; // Setembro (0-indexed)
+                        const daysInMonth = new Date(year, month + 1, 0).getDate();
+                        const firstDayOfMonth = new Date(year, month, 1).getDay();
+
+                        const days = [];
+
+                        // Dias vazios do início do mês
+                        for (let i = 0; i < firstDayOfMonth; i++) {
+                          days.push(<div key={`empty-${i}`} className="py-1"></div>);
+                        }
+
+                        // Dias do mês
+                        for (let day = 1; day <= daysInMonth; day++) {
+                          const currentDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                          const isSelected = currentDate === selectedDate;
+                          days.push(
+                            <button
+                              key={day}
+                              onClick={() => {
+                                setSelectedDate(currentDate);
+                              }}
+                              className={`text-center py-1 rounded text-xs transition-colors ${isSelected
+                                ? 'bg-orange-500 text-white'
+                                : 'text-slate-300 hover:bg-slate-600'
+                                }`}
+                            >
+                              {day}
+                            </button>
+                          );
+                        }
+
+                        return days;
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Filtros */}
+                  <div className="space-y-3">
+                    <div className="flex items-center space-x-2 text-slate-300">
+                      <CogIcon className="w-5 h-5" />
+                      <span className="font-medium">Buscar e Agendar</span>
+                    </div>
+
+                    <div className="flex items-center space-x-2 text-slate-300">
+                      <CogIcon className="w-5 h-5" />
+                      <span className="font-medium">Seleção de Profissionais</span>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">Nome do profissional</label>
+                      <div className="flex space-x-2">
+                        <input
+                          type="text"
+                          className="flex-1 px-2 py-1.5 bg-slate-700 border border-slate-600 rounded text-white text-xs"
+                          placeholder="Digite o nome"
+                        />
+                        <button className="px-2 py-1.5 bg-slate-600 text-white rounded text-xs">Todos</button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">Status do Agendamento</label>
+                      <select className="w-full px-2 py-1.5 bg-slate-700 border border-slate-600 rounded text-white text-xs">
+                        <option>Todos</option>
+                        <option>Confirmado</option>
+                        <option>Pendente</option>
+                        <option>Cancelado</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">Fechamento de Conta</label>
+                      <select className="w-full px-2 py-1.5 bg-slate-700 border border-slate-600 rounded text-white text-xs">
+                        <option>Todos</option>
+                        <option>Pago</option>
+                        <option>Pendente</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">Tamanho da agenda</label>
+                      <select className="w-full px-2 py-1.5 bg-slate-700 border border-slate-600 rounded text-white text-xs">
+                        <option>Padrão</option>
+                        <option>Compacta</option>
+                        <option>Ampliada</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">Exibição da agenda</label>
+                      <select className="w-full px-2 py-1.5 bg-slate-700 border border-slate-600 rounded text-white text-xs">
+                        <option>Dia</option>
+                        <option>Semana</option>
+                        <option>Mês</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Área Principal da Agenda */}
+                <div className="flex-1 bg-slate-900">
+                  {/* Header da Agenda */}
+                  <div className="bg-slate-800 border-b border-slate-700 p-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-4">
+                        <div className="text-center">
+                          <h2 className="text-lg font-bold text-white">
+                            {(() => {
+                              const [year, month, day] = selectedDate.split('-');
+                              const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+                              return `${date.getDate()} ${date.toLocaleDateString('pt-BR', { month: 'short' })} ${date.getFullYear()}`;
+                            })()}
+                          </h2>
+                          <p className="text-sm text-slate-400">
+                            {(() => {
+                              const [year, month, day] = selectedDate.split('-');
+                              const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+                              return date.toLocaleDateString('pt-BR', { weekday: 'long' });
+                            })()}
+                          </p>
+                          {(() => {
+                            const { isClosed } = getOperatingHours();
+                            if (isClosed) {
+                              return <p className="text-xs text-red-400 mt-1">🔒 Fechado</p>;
+                            }
+                            return null;
+                          })()}
+                        </div>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            placeholder="Buscar clientes agendados hoje"
+                            className="w-80 px-4 py-2 pl-10 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400"
+                          />
+                          <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-3">
+                        <button
+                          onClick={refreshAgenda}
+                          disabled={isLoadingData}
+                          className="text-slate-400 hover:text-slate-300 transition-colors disabled:opacity-50"
+                          title="Atualizar agenda"
+                        >
+                          <svg
+                            className={`w-5 h-5 ${isLoadingData ? 'animate-spin' : ''}`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
+                        </button>
+                        <button className="bg-orange-500 text-white px-6 py-3 rounded-lg font-medium hover:bg-orange-600 transition-colors">
+                          + Agendar
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Cabeçalho dos Profissionais */}
+                  <div className="bg-slate-800 border-b border-slate-700">
+                    <div className="flex">
+                      <div className="w-20 bg-slate-700 border-r border-slate-600 p-3">
+                        <div className="text-xs text-slate-400 text-center">Profissional</div>
+                      </div>
+                      <div className="flex-1 bg-slate-700 p-3">
+                        <div className="flex items-center">
+                          <span className="text-white font-medium">vitor</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Grade da Agenda */}
+                  <div className="flex" style={{ height: '600px' }}>
+                    {/* Coluna de Horários */}
+                    <div className="w-20 bg-slate-800 border-r border-slate-700">
+                      {(() => {
+                        const { startHour, endHour, isClosed } = getOperatingHours();
+
+                        if (isClosed) {
+                          return (
+                            <div className="h-16 flex items-center justify-center text-sm text-slate-500">
+                              Fechado
+                            </div>
+                          );
+                        }
+
+                        const hours = [];
+                        const totalHours = endHour - startHour + 1;
+                        const slotHeight = `calc(600px / ${totalHours})`; // Altura fixa de 600px dividida pelas horas
+
+                        for (let hour = startHour; hour <= endHour; hour++) {
+                          const isSpecial = hour === startHour || hour === endHour;
+                          hours.push(
+                            <div
+                              key={hour}
+                              className={`border-b border-slate-700 flex items-start justify-center text-xs pt-1 ${isSpecial
+                                ? 'bg-blue-500/20 text-blue-400'
+                                : 'text-slate-400'
+                                }`}
+                              style={{ height: slotHeight }}
+                            >
+                              {hour}h
+                            </div>
+                          );
+                        }
+                        return hours;
+                      })()}
+                    </div>
+
+                    {/* Coluna de Agendamentos */}
+                    <div className="flex-1 relative">
+
+                      {/* Grade de horários */}
+                      {(() => {
+                        const { startHour, endHour, isClosed } = getOperatingHours();
+
+                        if (isClosed) {
+                          return (
+                            <div className="h-16 border-b border-slate-700 border-dashed relative flex items-center justify-center">
+                              <span className="text-slate-500 text-sm">Estabelecimento fechado</span>
+                            </div>
+                          );
+                        }
+
+                        const timeSlots = [];
+                        const totalHours = endHour - startHour + 1;
+                        const slotHeight = `calc(600px / ${totalHours})`; // Altura fixa de 600px dividida pelas horas
+
+                        for (let hour = startHour; hour <= endHour; hour++) {
+                          const isLastHour = hour === endHour;
+                          timeSlots.push(
+                            <div
+                              key={hour}
+                              className="relative"
+                              style={{ height: slotHeight }}
+                            >
+                              {/* Linha sólida na parte superior (divisão entre horários) */}
+                              <div className="absolute top-0 left-0 right-0 h-px bg-slate-700"></div>
+
+                              {/* Linha pontilhada no meio da hora (9:30) */}
+                              <div className="absolute top-1/2 left-0 right-0 h-px bg-slate-700 border-dashed border-t"></div>
+
+                              {/* Linha sólida na parte inferior (exceto na última hora) */}
+                              {!isLastHour && (
+                                <div className="absolute bottom-0 left-0 right-0 h-px bg-slate-700"></div>
+                              )}
+
+                              {/* Aqui ficariam os agendamentos */}
+                            </div>
+                          );
+                        }
+                        return timeSlots;
+                      })()}
+
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'configurations' && (
+              <div>
+                <div className="flex justify-between items-center mb-8">
+                  <h2 className="text-3xl font-bold text-white">Configurações da Barbearia</h2>
+                </div>
+
+                <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-8">
+                  {/* Informações Básicas */}
+                  <div className="bg-white shadow-lg rounded-xl p-8">
+                    <h3 className="text-lg font-medium text-gray-900 mb-4">Informações Básicas</h3>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Nome da Barbearia</label>
+                        <input
+                          type="text"
+                          value={configurations.name}
+                          onChange={(e) => handleSlugChange(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="Digite o nome da barbearia"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Slug (URL)</label>
+                        <div className="flex">
+                          <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 text-gray-500 text-sm">
+                            noxoraa.vercel.app/b/
+                          </span>
+                          <input
+                            type="text"
+                            value={configurations.slug}
+                            onChange={(e) => handleConfigChange('slug', e.target.value)}
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-r-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="slug-da-barbearia"
+                          />
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          O slug é gerado automaticamente baseado no nome, mas você pode editá-lo
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
+                        <textarea
+                          value={configurations.description}
+                          onChange={(e) => handleConfigChange('description', e.target.value)}
+                          rows={3}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="Descreva sua barbearia"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Contato */}
+                  <div className="bg-white shadow-lg rounded-xl p-8">
+                    <h3 className="text-lg font-medium text-gray-900 mb-4">Contato</h3>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Endereço</label>
+                        <input
+                          type="text"
+                          value={configurations.address}
+                          onChange={(e) => handleConfigChange('address', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="Rua, número - Bairro, Cidade"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Telefone</label>
+                        <input
+                          type="text"
+                          value={configurations.phone}
+                          onChange={(e) => handleConfigChange('phone', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="(11) 99999-9999"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                        <input
+                          type="email"
+                          value={configurations.email}
+                          onChange={(e) => handleConfigChange('email', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="contato@barbearia.com"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Instagram</label>
+                        <input
+                          type="text"
+                          value={configurations.instagram}
+                          onChange={(e) => handleConfigChange('instagram', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="@barbearia"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Logo e Banner */}
+                  <div className="bg-white shadow-lg rounded-xl p-8">
+                    <h3 className="text-lg font-medium text-gray-900 mb-4">Logo da Barbearia</h3>
+                    <div className="space-y-4">
+                      <div className="flex items-center space-x-4">
+                        <div className="w-20 h-20 bg-gray-100 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300">
+                          <ImageIcon className="h-8 w-8 text-gray-400" />
+                        </div>
+                        <div className="flex-1">
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Upload do Logo</label>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => handleFileChange('logoFile', e.target.files?.[0] || null)}
+                            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">PNG, JPG até 2MB. Recomendado: 200x200px</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Banner */}
+                  <div className="bg-white shadow-lg rounded-xl p-8">
+                    <h3 className="text-lg font-medium text-gray-900 mb-4">Banner da Barbearia</h3>
+                    <div className="space-y-4">
+                      <div className="w-full h-32 bg-gray-100 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300">
+                        <div className="text-center">
+                          <ImageIcon className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                          <p className="text-sm text-gray-500">Banner Preview</p>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Upload do Banner</label>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => handleFileChange('bannerFile', e.target.files?.[0] || null)}
+                          className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">PNG, JPG até 5MB. Recomendado: 1200x400px</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Horário de Funcionamento */}
+                  <div className="bg-slate-800 shadow-lg rounded-xl p-8 lg:col-span-2 border border-slate-700">
+                    <h3 className="text-lg font-medium text-white mb-6">Horário de Funcionamento</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7 gap-6">
+                      {['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'].map((day, index) => {
+                        const dayNames = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+                        const dayKey = dayNames[index];
+                        const dayConfig = configurations.openingHours[dayKey as keyof typeof configurations.openingHours];
+
+                        return (
+                          <div key={day} className="space-y-3">
+                            <div className="text-sm font-medium text-slate-300 text-center">{day}</div>
+                            <div className="space-y-2">
+                              <div className="flex items-center space-x-2">
+                                <input
+                                  type="time"
+                                  value={dayConfig.open}
+                                  onChange={(e) => handleConfigChange('openingHours', {
+                                    ...configurations.openingHours,
+                                    [dayKey]: { ...dayConfig, open: e.target.value }
+                                  })}
+                                  className="w-full px-3 py-2 border border-slate-600 bg-slate-700 text-white rounded text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                />
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <input
+                                  type="time"
+                                  value={dayConfig.close}
+                                  onChange={(e) => handleConfigChange('openingHours', {
+                                    ...configurations.openingHours,
+                                    [dayKey]: { ...dayConfig, close: e.target.value }
+                                  })}
+                                  className="w-full px-3 py-2 border border-slate-600 bg-slate-700 text-white rounded text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                />
+                              </div>
+                              <div className="flex items-center justify-center">
+                                <input
+                                  type="checkbox"
+                                  checked={!dayConfig.closed}
+                                  onChange={(e) => handleConfigChange('openingHours', {
+                                    ...configurations.openingHours,
+                                    [dayKey]: { ...dayConfig, closed: !e.target.checked }
+                                  })}
+                                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-slate-600 rounded bg-slate-700"
+                                />
+                                <span className="ml-2 text-xs text-slate-400">Aberto</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Preview da URL Pública */}
+                  <div className="bg-white shadow rounded-lg p-6 lg:col-span-2">
+                    <h3 className="text-lg font-medium text-gray-900 mb-4">Preview da URL Pública</h3>
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <Globe className="h-4 w-4 text-gray-500" />
+                        <span className="text-sm font-medium text-gray-700">URL da sua barbearia:</span>
+                      </div>
+                      <code className="text-sm text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                        https://noxoraa.vercel.app/b/{configurations.slug}
+                      </code>
+                      <p className="text-xs text-gray-500 mt-2">
+                        Esta é a URL que seus clientes usarão para fazer agendamentos.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-6 flex justify-end">
+                  <button
+                    onClick={saveConfigurations}
+                    disabled={savingConfig}
+                    className={`px-6 py-2 rounded-lg transition-colors flex items-center space-x-2 ${savingConfig
+                      ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                      : 'bg-blue-600 text-white hover:bg-blue-700'
+                      }`}
+                  >
+                    {savingConfig ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        <span>Salvando...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Salvar Configurações</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'clients' && (
+              <div>
+                <div className="flex justify-between items-center mb-8">
+                  <h2 className="text-3xl font-bold text-white">Clientes</h2>
+                  <button
+                    onClick={loadClients}
+                    className="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 flex items-center font-medium transition-colors"
+                  >
+                    Recarregar
+                  </button>
+                </div>
+
+                {/* Debug info */}
+                <div className="mb-4 p-4 bg-amber-900/20 border border-amber-500/20 rounded-lg">
+                  <p className="text-sm text-amber-400">
+                    <strong>Debug:</strong> Total de clientes carregados: {clients.length}
+                  </p>
+                </div>
+
+                <div className="bg-slate-800 shadow-lg rounded-xl overflow-hidden border border-slate-700">
+                  {clients.length === 0 ? (
+                    <div className="p-8 text-center">
+                      <UsersIcon className="mx-auto h-12 w-12 text-slate-400" />
+                      <h3 className="mt-2 text-sm font-medium text-white">Nenhum cliente encontrado</h3>
+                      <p className="mt-1 text-sm text-slate-400">
+                        Os clientes aparecerão aqui quando fizerem agendamentos.
+                      </p>
+                    </div>
+                  ) : (
+                    <table className="w-full divide-y divide-slate-700">
+                      <thead className="bg-slate-700">
+                        <tr>
+                          <th className="px-8 py-4 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                            Cliente
+                          </th>
+                          <th className="px-8 py-4 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                            Email
+                          </th>
+                          <th className="px-8 py-4 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                            Telefone
+                          </th>
+                          <th className="px-8 py-4 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                            Data de Cadastro
+                          </th>
+                          <th className="px-8 py-4 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                            Ações
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-slate-800 divide-y divide-slate-700">
+                        {clients.map((client) => (
+                          <tr key={client.id}>
+                            <td className="px-8 py-5 whitespace-nowrap">
+                              <div className="flex items-center">
+                                <div className="w-10 h-10 bg-slate-600 rounded-full flex items-center justify-center mr-3">
+                                  <span className="text-sm font-medium text-white">
+                                    {client.name.charAt(0).toUpperCase()}
+                                  </span>
+                                </div>
+                                <div className="text-sm font-medium text-white">{client.name}</div>
+                              </div>
+                            </td>
+                            <td className="px-8 py-5 whitespace-nowrap text-sm text-white">
+                              {client.email}
+                            </td>
+                            <td className="px-8 py-5 whitespace-nowrap text-sm text-white">
+                              {client.phone}
+                            </td>
+                            <td className="px-8 py-5 whitespace-nowrap text-sm text-white">
+                              {formatDate(client.createdAt)}
+                            </td>
+                            <td className="px-8 py-5 whitespace-nowrap text-sm font-medium">
+                              <button className="text-blue-600 hover:text-blue-900 mr-3">
+                                <PencilIcon className="h-4 w-4" />
+                              </button>
+                              <button className="text-red-600 hover:text-red-900">
+                                <TrashIcon className="h-4 w-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            )}
+
           </div>
-        </div>
-      )}
 
-      {/* Modal de Confirmação de Exclusão */}
-      <ConfirmationModal
-        isOpen={showDeleteModal}
-        onClose={cancelDeleteEmployee}
-        onConfirm={confirmDeleteEmployee}
-        title="Excluir Funcionário"
-        message={`Tem certeza que deseja excluir o funcionário "${employeeToDelete?.name}"? Esta ação não pode ser desfeita.`}
-        confirmText="Excluir"
-        cancelText="Cancelar"
-        type="danger"
-        isLoading={isDeleting}
-      />
+          {/* Modal de Serviço */}
+          {showServiceModal && (
+            <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+              <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+                <div className="mt-3">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">
+                    {editingService ? 'Editar Serviço' : 'Novo Serviço'}
+                  </h3>
+                  <form onSubmit={handleServiceSubmit} className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Nome do Serviço
+                      </label>
+                      <input
+                        type="text"
+                        value={serviceForm.name}
+                        onChange={(e) => setServiceForm(prev => ({ ...prev, name: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Duração (minutos)
+                      </label>
+                      <input
+                        type="number"
+                        value={serviceForm.duration_min}
+                        onChange={(e) => setServiceForm(prev => ({ ...prev, duration_min: parseInt(e.target.value) || 0 }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        min="15"
+                        step="15"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Preço (R$)
+                      </label>
+                      <input
+                        type="text"
+                        value={serviceForm.price_reais}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setServiceForm(prev => ({
+                            ...prev,
+                            price_reais: value,
+                            price_cents: reaisToCents(value)
+                          }));
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="0,00"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Descrição
+                      </label>
+                      <textarea
+                        value={serviceForm.description}
+                        onChange={(e) => setServiceForm(prev => ({ ...prev, description: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        rows={3}
+                      />
+                    </div>
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={serviceForm.is_active}
+                        onChange={(e) => setServiceForm(prev => ({ ...prev, is_active: e.target.checked }))}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      />
+                      <label className="ml-2 block text-sm text-gray-900">
+                        Serviço ativo
+                      </label>
+                    </div>
+                    <div className="flex justify-end space-x-3 pt-4">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowServiceModal(false);
+                          setEditingService(null);
+                          setServiceForm({ name: '', duration_min: 30, price_cents: 0, price_reais: '0,00', description: '', is_active: true });
+                        }}
+                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
+                      >
+                        {editingService ? 'Atualizar' : 'Criar'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Modal de Funcionário */}
+          {showEmployeeModal && (
+            <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+              <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+                <div className="mt-3">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">
+                    {editingEmployee ? 'Editar Funcionário' : 'Novo Funcionário'}
+                  </h3>
+                  <form onSubmit={handleEmployeeSubmit} className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Nome Completo
+                      </label>
+                      <input
+                        type="text"
+                        value={employeeForm.name}
+                        onChange={(e) => setEmployeeForm(prev => ({ ...prev, name: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Cargo
+                      </label>
+                      <select
+                        value={employeeForm.role}
+                        onChange={(e) => setEmployeeForm(prev => ({ ...prev, role: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="BARBER">Barbeiro</option>
+                        <option value="RECEPTIONIST">Recepcionista</option>
+                        <option value="MANAGER">Gerente</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Email
+                      </label>
+                      <input
+                        type="email"
+                        value={employeeForm.email}
+                        onChange={(e) => setEmployeeForm(prev => ({ ...prev, email: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Telefone
+                      </label>
+                      <input
+                        type="tel"
+                        value={employeeForm.phone}
+                        onChange={(e) => setEmployeeForm(prev => ({ ...prev, phone: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        required
+                      />
+                    </div>
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={employeeForm.active}
+                        onChange={(e) => setEmployeeForm(prev => ({ ...prev, active: e.target.checked }))}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      />
+                      <label className="ml-2 block text-sm text-gray-900">
+                        Funcionário ativo
+                      </label>
+                    </div>
+                    <div className="flex justify-end space-x-3 pt-4">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowEmployeeModal(false);
+                          setEditingEmployee(null);
+                          setEmployeeForm({ name: '', role: 'BARBER', email: '', phone: '', active: true });
+                        }}
+                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
+                      >
+                        {editingEmployee ? 'Atualizar' : 'Criar'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Modal de Confirmação de Exclusão */}
+          {/* Seção de Assinaturas */}
+          {activeTab === 'subscriptions' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">Gerenciar Assinaturas</h2>
+                  <p className="text-gray-600 mt-1">Configure planos de assinatura para seus clientes</p>
+                </div>
+                <button className="bg-gradient-to-r from-pink-500 to-pink-600 text-white px-6 py-3 rounded-xl font-medium hover:from-pink-600 hover:to-pink-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5">
+                  <PlusIcon className="h-5 w-5 inline mr-2" />
+                  Nova Assinatura
+                </button>
+              </div>
+
+              {/* Cards de Assinaturas */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-8">
+                {/* Plano Básico */}
+                <div className="bg-white rounded-2xl shadow-lg border border-gray-200/50 p-6 hover:shadow-xl transition-all duration-200">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl flex items-center justify-center">
+                      <span className="text-white text-xl font-bold">B</span>
+                    </div>
+                    <span className="bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded-full">Ativo</span>
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">Plano Básico</h3>
+                  <p className="text-gray-600 text-sm mb-4">1 corte por mês + desconto em produtos</p>
+                  <div className="flex items-baseline mb-4">
+                    <span className="text-3xl font-bold text-gray-900">R$ 29</span>
+                    <span className="text-gray-600 ml-1">/mês</span>
+                  </div>
+                  <div className="space-y-2 mb-6">
+                    <div className="flex items-center text-sm text-gray-600">
+                      <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                      1 corte por mês
+                    </div>
+                    <div className="flex items-center text-sm text-gray-600">
+                      <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                      10% desconto em produtos
+                    </div>
+                    <div className="flex items-center text-sm text-gray-600">
+                      <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                      Agendamento prioritário
+                    </div>
+                  </div>
+                  <div className="flex space-x-2">
+                    <button className="flex-1 bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors">
+                      Editar
+                    </button>
+                    <button className="flex-1 bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-600 transition-colors">
+                      Ver Assinantes
+                    </button>
+                  </div>
+                </div>
+
+                {/* Plano Premium */}
+                <div className="bg-white rounded-2xl shadow-lg border border-gray-200/50 p-6 hover:shadow-xl transition-all duration-200">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-purple-600 rounded-xl flex items-center justify-center">
+                      <span className="text-white text-xl font-bold">P</span>
+                    </div>
+                    <span className="bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded-full">Ativo</span>
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">Plano Premium</h3>
+                  <p className="text-gray-600 text-sm mb-4">3 cortes por mês + produtos inclusos</p>
+                  <div className="flex items-baseline mb-4">
+                    <span className="text-3xl font-bold text-gray-900">R$ 79</span>
+                    <span className="text-gray-600 ml-1">/mês</span>
+                  </div>
+                  <div className="space-y-2 mb-6">
+                    <div className="flex items-center text-sm text-gray-600">
+                      <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                      3 cortes por mês
+                    </div>
+                    <div className="flex items-center text-sm text-gray-600">
+                      <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                      Produtos inclusos
+                    </div>
+                    <div className="flex items-center text-sm text-gray-600">
+                      <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                      Agendamento flexível
+                    </div>
+                  </div>
+                  <div className="flex space-x-2">
+                    <button className="flex-1 bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors">
+                      Editar
+                    </button>
+                    <button className="flex-1 bg-purple-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-purple-600 transition-colors">
+                      Ver Assinantes
+                    </button>
+                  </div>
+                </div>
+
+                {/* Adicionar Novo Plano */}
+                <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl border-2 border-dashed border-gray-300 p-6 hover:border-gray-400 transition-all duration-200 cursor-pointer">
+                  <div className="flex flex-col items-center justify-center h-full text-center">
+                    <div className="w-12 h-12 bg-gray-300 rounded-xl flex items-center justify-center mb-4">
+                      <PlusIcon className="h-6 w-6 text-gray-600" />
+                    </div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">Criar Novo Plano</h3>
+                    <p className="text-gray-600 text-sm">Adicione um novo plano de assinatura</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Estatísticas de Assinaturas */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-8">
+                <div className="bg-white rounded-xl shadow-lg p-6">
+                  <div className="flex items-center">
+                    <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                      </svg>
+                    </div>
+                    <div className="ml-4">
+                      <p className="text-sm font-medium text-gray-600">Total de Assinantes</p>
+                      <p className="text-2xl font-bold text-gray-900">47</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-lg p-6">
+                  <div className="flex items-center">
+                    <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                      <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                      </svg>
+                    </div>
+                    <div className="ml-4">
+                      <p className="text-sm font-medium text-gray-600">Receita Mensal</p>
+                      <p className="text-2xl font-bold text-gray-900">R$ 3.247</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-lg p-6">
+                  <div className="flex items-center">
+                    <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                      <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                      </svg>
+                    </div>
+                    <div className="ml-4">
+                      <p className="text-sm font-medium text-gray-600">Crescimento</p>
+                      <p className="text-2xl font-bold text-gray-900">+12%</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-lg p-6">
+                  <div className="flex items-center">
+                    <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                      <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                      </svg>
+                    </div>
+                    <div className="ml-4">
+                      <p className="text-sm font-medium text-gray-600">Taxa de Retenção</p>
+                      <p className="text-2xl font-bold text-gray-900">89%</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Seção de Meu Plano */}
+          {activeTab === 'plan' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">Meu Plano Noxora</h2>
+                  <p className="text-gray-600 mt-1">Gerencie sua assinatura da plataforma</p>
+                </div>
+              </div>
+
+              {/* Plano Atual */}
+              <div className="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-2xl shadow-2xl p-8 text-white">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h3 className="text-2xl font-bold mb-2">Plano Starter</h3>
+                    <p className="text-indigo-100">Ideal para barbearias iniciantes</p>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-4xl font-bold">R$ 97</div>
+                    <div className="text-indigo-100">/mês</div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                  <div className="bg-white/20 rounded-lg p-4">
+                    <div className="text-sm text-indigo-100 mb-1">Funcionários</div>
+                    <div className="text-2xl font-bold">Até 3</div>
+                  </div>
+                  <div className="bg-white/20 rounded-lg p-4">
+                    <div className="text-sm text-indigo-100 mb-1">Agendamentos</div>
+                    <div className="text-2xl font-bold">Ilimitados</div>
+                  </div>
+                  <div className="bg-white/20 rounded-lg p-4">
+                    <div className="text-sm text-indigo-100 mb-1">Suporte</div>
+                    <div className="text-2xl font-bold">24/7</div>
+                  </div>
+                </div>
+
+                <div className="flex space-x-4">
+                  <button className="bg-white text-indigo-600 px-6 py-3 rounded-lg font-medium hover:bg-indigo-50 transition-colors">
+                    Alterar Plano
+                  </button>
+                  <button className="bg-white/20 text-white px-6 py-3 rounded-lg font-medium hover:bg-white/30 transition-colors">
+                    Ver Detalhes
+                  </button>
+                </div>
+              </div>
+
+              {/* Comparação de Planos */}
+              <div className="bg-white rounded-2xl shadow-lg p-6">
+                <h3 className="text-xl font-bold text-gray-900 mb-6">Compare os Planos</h3>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+                  {/* Plano Starter */}
+                  <div className="border-2 border-indigo-200 rounded-xl p-6 relative">
+                    <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+                      <span className="bg-indigo-500 text-white text-xs font-medium px-3 py-1 rounded-full">Atual</span>
+                    </div>
+                    <div className="text-center mb-4">
+                      <h4 className="text-lg font-bold text-gray-900">Starter</h4>
+                      <div className="text-3xl font-bold text-gray-900 mt-2">R$ 97</div>
+                      <div className="text-gray-600">/mês</div>
+                    </div>
+                    <ul className="space-y-3 text-sm">
+                      <li className="flex items-center">
+                        <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                        Até 3 funcionários
+                      </li>
+                      <li className="flex items-center">
+                        <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                        Agendamentos ilimitados
+                      </li>
+                      <li className="flex items-center">
+                        <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                        Suporte por email
+                      </li>
+                    </ul>
+                  </div>
+
+                  {/* Plano Professional */}
+                  <div className="border-2 border-gray-200 rounded-xl p-6">
+                    <div className="text-center mb-4">
+                      <h4 className="text-lg font-bold text-gray-900">Professional</h4>
+                      <div className="text-3xl font-bold text-gray-900 mt-2">R$ 197</div>
+                      <div className="text-gray-600">/mês</div>
+                    </div>
+                    <ul className="space-y-3 text-sm">
+                      <li className="flex items-center">
+                        <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                        Até 10 funcionários
+                      </li>
+                      <li className="flex items-center">
+                        <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                        Relatórios avançados
+                      </li>
+                      <li className="flex items-center">
+                        <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                        Suporte prioritário
+                      </li>
+                    </ul>
+                    <button className="w-full mt-4 bg-indigo-500 text-white py-2 rounded-lg font-medium hover:bg-indigo-600 transition-colors">
+                      Fazer Upgrade
+                    </button>
+                  </div>
+
+                  {/* Plano Enterprise */}
+                  <div className="border-2 border-gray-200 rounded-xl p-6">
+                    <div className="text-center mb-4">
+                      <h4 className="text-lg font-bold text-gray-900">Enterprise</h4>
+                      <div className="text-3xl font-bold text-gray-900 mt-2">R$ 397</div>
+                      <div className="text-gray-600">/mês</div>
+                    </div>
+                    <ul className="space-y-3 text-sm">
+                      <li className="flex items-center">
+                        <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                        Funcionários ilimitados
+                      </li>
+                      <li className="flex items-center">
+                        <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                        API personalizada
+                      </li>
+                      <li className="flex items-center">
+                        <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                        Suporte dedicado
+                      </li>
+                    </ul>
+                    <button className="w-full mt-4 bg-gray-200 text-gray-700 py-2 rounded-lg font-medium hover:bg-gray-300 transition-colors">
+                      Contatar Vendas
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Informações de Cobrança */}
+              <div className="bg-white rounded-2xl shadow-lg p-6">
+                <h3 className="text-xl font-bold text-gray-900 mb-6">Informações de Cobrança</h3>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-8">
+                  <div>
+                    <h4 className="font-medium text-gray-900 mb-3">Próxima Cobrança</h4>
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-600">Data</span>
+                        <span className="font-medium">15 de Outubro, 2024</span>
+                      </div>
+                      <div className="flex justify-between items-center mt-2">
+                        <span className="text-gray-600">Valor</span>
+                        <span className="font-bold text-lg">R$ 97,00</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="font-medium text-gray-900 mb-3">Método de Pagamento</h4>
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <div className="flex items-center">
+                        <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+                          <svg className="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2zm0 2v12h16V6H4zm2 2h12v2H6V8zm0 4h12v2H6v-2z" />
+                          </svg>
+                        </div>
+                        <div>
+                          <div className="font-medium">Cartão terminado em 4242</div>
+                          <div className="text-sm text-gray-600">Visa •••• 4242</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-6 flex space-x-4">
+                  <button className="bg-indigo-500 text-white px-6 py-2 rounded-lg font-medium hover:bg-indigo-600 transition-colors">
+                    Alterar Método de Pagamento
+                  </button>
+                  <button className="bg-gray-100 text-gray-700 px-6 py-2 rounded-lg font-medium hover:bg-gray-200 transition-colors">
+                    Baixar Fatura
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <ConfirmationModal
+            isOpen={showDeleteModal}
+            onClose={cancelDeleteEmployee}
+            onConfirm={confirmDeleteEmployee}
+            title="Excluir Funcionário"
+            message={`Tem certeza que deseja excluir o funcionário "${employeeToDelete?.name}"? Esta ação não pode ser desfeita.`}
+            confirmText="Excluir"
+            cancelText="Cancelar"
+            type="danger"
+            isLoading={isDeleting}
+          />
+        </div>
+      </div>
     </div>
   );
 }

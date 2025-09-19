@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getErrorMessage, isCredentialError, isValidationError, isSystemError } from '@/lib/errors/error-messages';
+import { Logo } from '@/components/logo';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -92,9 +93,7 @@ export default function LoginPage() {
         {/* Logo */}
         <div className="text-center">
           <div className="mx-auto h-20 w-20 bg-white rounded-full flex items-center justify-center shadow-lg">
-            <svg className="h-12 w-12 text-[#01ABFE]" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-            </svg>
+            <Logo width={60} height={60} />
           </div>
           <h2 className="mt-6 text-center text-4xl font-bold text-white">
             Bem-vindo de volta
@@ -297,8 +296,8 @@ export default function LoginPage() {
 
                 {forgotPasswordMessage && (
                   <div className={`p-4 rounded-xl text-sm ${forgotPasswordMessage.includes('Erro')
-                      ? 'bg-red-50 text-red-800 border border-red-200'
-                      : 'bg-green-50 text-green-800 border border-green-200'
+                    ? 'bg-red-50 text-red-800 border border-red-200'
+                    : 'bg-green-50 text-green-800 border border-green-200'
                     }`}>
                     {forgotPasswordMessage}
                   </div>

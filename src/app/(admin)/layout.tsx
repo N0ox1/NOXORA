@@ -3,9 +3,9 @@ import { Toaster } from 'react-hot-toast';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen w-full">
       <Toaster />
-      <main className="mx-auto max-w-5xl p-6">{children}</main>
+      <main className="w-full">{children}</main>
     </div>
   );
 }
