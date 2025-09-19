@@ -96,14 +96,17 @@ export default function RegisterPage() {
       // Primeira etapa do registro bem-sucedida
       console.log('Primeira etapa do registro realizada com sucesso:', result);
 
-      // Salvar dados temporários no localStorage para uso posterior
-      localStorage.setItem('registrationData', JSON.stringify({
-        userId: result.data.userId,
-        tenantId: result.data.tenantId,
-        barbershopId: result.data.barbershopId,
-        businessName: result.data.businessName,
-        ownerName: result.data.ownerName
-      }));
+      // Verificar se estamos no cliente antes de acessar localStorage
+      if (typeof window !== 'undefined') {
+        // Salvar dados temporários no localStorage para uso posterior
+        localStorage.setItem('registrationData', JSON.stringify({
+          userId: result.data.userId,
+          tenantId: result.data.tenantId,
+          barbershopId: result.data.barbershopId,
+          businessName: result.data.businessName,
+          ownerName: result.data.ownerName
+        }));
+      }
 
       // Redirecionar diretamente para a próxima etapa
       router.push('/register/business-size');

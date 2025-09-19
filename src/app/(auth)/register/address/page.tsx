@@ -98,6 +98,11 @@ export default function AddressPage() {
         setIsLoading(true);
 
         try {
+            // Verificar se estamos no cliente antes de acessar localStorage
+            if (typeof window === 'undefined') {
+                throw new Error('Aplicação não está pronta. Tente novamente.');
+            }
+
             // Buscar dados do cadastro do localStorage
             const registrationData = localStorage.getItem('registrationData');
             if (!registrationData) {
