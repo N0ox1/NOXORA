@@ -8,7 +8,13 @@ import {
   TrashIcon,
   CogIcon,
   UsersIcon,
-  MagnifyingGlassIcon
+  MagnifyingGlassIcon,
+  WrenchScrewdriverIcon,
+  CalendarDaysIcon,
+  UserGroupIcon,
+  CreditCardIcon,
+  StarIcon,
+  Cog6ToothIcon
 } from '@heroicons/react/24/outline';
 import { ImageIcon, Globe, TrendingUp, DollarSign, Users, BarChart3 } from 'lucide-react';
 import { ConfirmationModal } from '@/components/ui/confirmation-modal';
@@ -752,24 +758,24 @@ export default function AdminDashboard() {
 
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex dashboard-container">
+    <div className="min-h-screen w-full bg-black flex dashboard-container">
       {/* Menu Lateral Vertical */}
-      <div className="w-72 bg-slate-800/95 backdrop-blur-sm shadow-2xl border-r border-slate-700/50 flex flex-col flex-shrink-0">
+      <div className="w-72 bg-black shadow-2xl border-r border-gray-800 flex flex-col flex-shrink-0">
         {/* Header do Menu */}
-        <div className="p-6 border-b border-slate-700/50">
+        <div className="p-6 border-b border-gray-800">
           <div className="text-center">
             <h1 className="text-xl font-bold text-white">
               {configurations.name}
             </h1>
-            <p className="text-slate-400 text-sm">Dashboard Admin</p>
+            <p className="text-gray-300 text-sm">Dashboard Admin</p>
           </div>
         </div>
 
         {/* Status e Loading */}
-        <div className="px-6 py-4 border-b border-slate-700/50">
+        <div className="px-6 py-4 border-b border-gray-800">
           {isLoadingData && (
             <div className="flex items-center text-[#01ABFE] bg-[#01ABFE]/20 px-4 py-3 rounded-lg mb-3">
-              <svg className="animate-spin -ml-1 mr-3 h-4 w-4 text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <svg className="animate-spin -ml-1 mr-3 h-4 w-4 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
@@ -786,23 +792,23 @@ export default function AdminDashboard() {
         {/* Menu de Navegação Vertical */}
         <nav className="flex-1 px-6 py-6 space-y-3">
           {[
-            { id: 'services', name: 'Serviços', icon: CogIcon, color: 'indigo', description: 'Gerencie seus serviços' },
-            { id: 'employees', name: 'Funcionários', icon: CogIcon, color: 'emerald', description: 'Equipe e colaboradores' },
-            { id: 'agenda', name: 'Agenda', icon: CogIcon, color: 'blue', description: 'Agendamentos e horários' },
-            { id: 'clients', name: 'Clientes', icon: CogIcon, color: 'amber', description: 'Base de clientes' },
-            { id: 'subscriptions', name: 'Assinaturas', icon: CogIcon, color: 'purple', description: 'Planos para clientes' },
-            { id: 'plan', name: 'Meu Plano', icon: CogIcon, color: 'violet', description: 'Sua assinatura Noxora' },
-            { id: 'configurations', name: 'Configurações', icon: CogIcon, color: 'slate', description: 'Configurações gerais' }
+            { id: 'services', name: 'Serviços', icon: WrenchScrewdriverIcon, color: 'indigo', description: 'Gerencie seus serviços' },
+            { id: 'employees', name: 'Funcionários', icon: UserGroupIcon, color: 'emerald', description: 'Equipe e colaboradores' },
+            { id: 'agenda', name: 'Agenda', icon: CalendarDaysIcon, color: 'blue', description: 'Agendamentos e horários' },
+            { id: 'clients', name: 'Clientes', icon: UsersIcon, color: 'amber', description: 'Base de clientes' },
+            { id: 'subscriptions', name: 'Assinaturas', icon: CreditCardIcon, color: 'purple', description: 'Planos para clientes' },
+            { id: 'plan', name: 'Meu Plano', icon: StarIcon, color: 'violet', description: 'Sua assinatura Noxora' },
+            { id: 'configurations', name: 'Configurações', icon: Cog6ToothIcon, color: 'slate', description: 'Configurações gerais' }
           ].map((tab) => {
             const isActive = activeTab === tab.id;
             const colorClasses = {
-              indigo: isActive ? 'bg-[#01ABFE] text-white shadow-[#01ABFE]/20' : 'text-[#01ABFE] hover:bg-[#6FD6FF]/50',
-              emerald: isActive ? 'bg-emerald-600 text-white shadow-emerald-500/20' : 'text-[#01ABFE] hover:bg-[#6FD6FF]/50',
-              blue: isActive ? 'bg-[#01ABFE] text-white shadow-[#01ABFE]/20' : 'text-[#01ABFE] hover:bg-[#6FD6FF]/50',
-              amber: isActive ? 'bg-amber-600 text-white shadow-amber-500/20' : 'text-[#01ABFE] hover:bg-[#6FD6FF]/50',
-              purple: isActive ? 'bg-purple-600 text-white shadow-purple-500/20' : 'text-[#01ABFE] hover:bg-[#6FD6FF]/50',
-              violet: isActive ? 'bg-violet-600 text-white shadow-violet-500/20' : 'text-[#01ABFE] hover:bg-[#6FD6FF]/50',
-              slate: isActive ? 'bg-[#01ABFE] text-white shadow-[#01ABFE]/20' : 'text-[#01ABFE] hover:bg-[#6FD6FF]/50'
+              indigo: isActive ? 'bg-gray-900 text-white shadow-lg border border-gray-700' : 'text-gray-300 hover:bg-gray-900 hover:text-white hover:border-gray-700 border border-transparent',
+              emerald: isActive ? 'bg-gray-900 text-white shadow-lg border border-gray-700' : 'text-gray-300 hover:bg-gray-900 hover:text-white hover:border-gray-700 border border-transparent',
+              blue: isActive ? 'bg-gray-900 text-white shadow-lg border border-gray-700' : 'text-gray-300 hover:bg-gray-900 hover:text-white hover:border-gray-700 border border-transparent',
+              amber: isActive ? 'bg-gray-900 text-white shadow-lg border border-gray-700' : 'text-gray-300 hover:bg-gray-900 hover:text-white hover:border-gray-700 border border-transparent',
+              purple: isActive ? 'bg-gray-900 text-white shadow-lg border border-gray-700' : 'text-gray-300 hover:bg-gray-900 hover:text-white hover:border-gray-700 border border-transparent',
+              violet: isActive ? 'bg-gray-900 text-white shadow-lg border border-gray-700' : 'text-gray-300 hover:bg-gray-900 hover:text-white hover:border-gray-700 border border-transparent',
+              slate: isActive ? 'bg-gray-900 text-white shadow-lg border border-gray-700' : 'text-gray-300 hover:bg-gray-900 hover:text-white hover:border-gray-700 border border-transparent'
             };
 
             return (
@@ -815,7 +821,7 @@ export default function AdminDashboard() {
                 <tab.icon className="w-6 h-6" />
                 <div className="flex-1 text-left">
                   <div className="font-semibold">{tab.name}</div>
-                  <div className={`text-xs ${isActive ? 'text-white/80' : 'text-gray-500'}`}>
+                  <div className={`text-xs ${isActive ? 'text-white/80' : 'text-gray-400'}`}>
                     {tab.description}
                   </div>
                 </div>
@@ -828,14 +834,14 @@ export default function AdminDashboard() {
         </nav>
 
         {/* Footer do Menu */}
-        <div className="p-6 border-t border-slate-700/50">
-          <div className="bg-gradient-to-r from-slate-700/50 to-slate-600/50 rounded-xl p-4">
+        <div className="p-6 border-t border-gray-800">
+          <div className="bg-gray-900 rounded-xl p-4">
             <div className="flex items-center justify-between mb-2">
-              <div className="text-sm text-[#01ABFE]">Última atualização</div>
+              <div className="text-sm text-gray-300">Última atualização</div>
               <button
                 onClick={refreshData}
                 disabled={isLoadingData}
-                className="text-[#01ABFE] hover:text-[#0099E6] transition-colors disabled:opacity-50"
+                className="text-gray-400 hover:text-white transition-colors disabled:opacity-50"
                 title="Atualizar dados"
               >
                 <svg
@@ -899,7 +905,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* Área de Conteúdo */}
-        <div className="flex-1 p-10 overflow-y-auto dashboard-content">
+        <div className="flex-1 p-10 overflow-y-auto dashboard-content bg-black">
           <div className="w-full">
             {/* Tab Content */}
             {activeTab === 'services' && (
@@ -908,7 +914,7 @@ export default function AdminDashboard() {
                   <h2 className="text-3xl font-bold text-white">Serviços</h2>
                   <button
                     onClick={() => setShowServiceModal(true)}
-                    className="bg-[#01ABFE] text-white px-6 py-3 rounded-lg hover:bg-[#0099E6] border border-[#01ABFE] flex items-center font-medium transition-colors"
+                    className="bg-gray-800 text-white px-6 py-3 rounded-lg hover:bg-gray-700 border border-gray-700 flex items-center font-medium transition-colors"
                   >
                     <PlusIcon className="h-5 w-5 mr-2" />
                     Novo Serviço
@@ -917,21 +923,21 @@ export default function AdminDashboard() {
 
                 <div className="bg-slate-800 shadow-lg rounded-xl overflow-hidden border border-slate-700">
                   <table className="w-full divide-y divide-gray-200">
-                    <thead className="bg-[#6FD6FF]">
+                    <thead className="bg-gray-900">
                       <tr>
-                        <th className="px-8 py-4 text-left text-xs font-medium text-[#01ABFE] uppercase tracking-wider">
+                        <th className="px-8 py-4 text-left text-xs font-medium text-white uppercase tracking-wider">
                           Serviço
                         </th>
-                        <th className="px-8 py-4 text-left text-xs font-medium text-[#01ABFE] uppercase tracking-wider">
+                        <th className="px-8 py-4 text-left text-xs font-medium text-white uppercase tracking-wider">
                           Duração
                         </th>
-                        <th className="px-8 py-4 text-left text-xs font-medium text-[#01ABFE] uppercase tracking-wider">
+                        <th className="px-8 py-4 text-left text-xs font-medium text-white uppercase tracking-wider">
                           Preço
                         </th>
-                        <th className="px-8 py-4 text-left text-xs font-medium text-[#01ABFE] uppercase tracking-wider">
+                        <th className="px-8 py-4 text-left text-xs font-medium text-white uppercase tracking-wider">
                           Status
                         </th>
-                        <th className="px-8 py-4 text-left text-xs font-medium text-[#01ABFE] uppercase tracking-wider">
+                        <th className="px-8 py-4 text-left text-xs font-medium text-white uppercase tracking-wider">
                           Ações
                         </th>
                       </tr>
@@ -964,7 +970,7 @@ export default function AdminDashboard() {
                           <td className="px-8 py-5 whitespace-nowrap text-sm font-medium">
                             <button
                               onClick={() => handleEditService(service)}
-                              className="text-[#01ABFE] hover:text-[#0099E6] mr-3 transition-colors"
+                              className="text-gray-400 hover:text-white mr-3 transition-colors"
                             >
                               <PencilIcon className="h-4 w-4" />
                             </button>
@@ -989,7 +995,7 @@ export default function AdminDashboard() {
                   <h2 className="text-3xl font-bold text-white">Colaboradores</h2>
                   <button
                     onClick={() => setShowEmployeeModal(true)}
-                    className="bg-[#01ABFE] text-white px-6 py-3 rounded-lg hover:bg-[#0099E6] border border-[#01ABFE] flex items-center font-medium transition-colors"
+                    className="bg-gray-800 text-white px-6 py-3 rounded-lg hover:bg-gray-700 border border-gray-700 flex items-center font-medium transition-colors"
                   >
                     <PlusIcon className="h-5 w-5 mr-2" />
                     Novo Funcionário
@@ -998,21 +1004,21 @@ export default function AdminDashboard() {
 
                 <div className="bg-slate-800 shadow-lg rounded-xl overflow-hidden border border-slate-700">
                   <table className="w-full divide-y divide-gray-200">
-                    <thead className="bg-[#6FD6FF]">
+                    <thead className="bg-gray-900">
                       <tr>
-                        <th className="px-8 py-4 text-left text-xs font-medium text-[#01ABFE] uppercase tracking-wider">
+                        <th className="px-8 py-4 text-left text-xs font-medium text-white uppercase tracking-wider">
                           Funcionário
                         </th>
-                        <th className="px-8 py-4 text-left text-xs font-medium text-[#01ABFE] uppercase tracking-wider">
+                        <th className="px-8 py-4 text-left text-xs font-medium text-white uppercase tracking-wider">
                           Cargo
                         </th>
-                        <th className="px-8 py-4 text-left text-xs font-medium text-[#01ABFE] uppercase tracking-wider">
+                        <th className="px-8 py-4 text-left text-xs font-medium text-white uppercase tracking-wider">
                           Contato
                         </th>
-                        <th className="px-8 py-4 text-left text-xs font-medium text-[#01ABFE] uppercase tracking-wider">
+                        <th className="px-8 py-4 text-left text-xs font-medium text-white uppercase tracking-wider">
                           Status
                         </th>
-                        <th className="px-8 py-4 text-left text-xs font-medium text-[#01ABFE] uppercase tracking-wider">
+                        <th className="px-8 py-4 text-left text-xs font-medium text-white uppercase tracking-wider">
                           Ações
                         </th>
                       </tr>
@@ -1048,7 +1054,7 @@ export default function AdminDashboard() {
                           <td className="px-8 py-5 whitespace-nowrap text-sm font-medium">
                             <button
                               onClick={() => handleEditEmployee(employee)}
-                              className="text-[#01ABFE] hover:text-[#0099E6] mr-3 transition-colors"
+                              className="text-gray-400 hover:text-white mr-3 transition-colors"
                             >
                               <PencilIcon className="h-4 w-4" />
                             </button>
@@ -1070,11 +1076,11 @@ export default function AdminDashboard() {
             {activeTab === 'agenda' && (
               <div className="flex h-full w-full">
                 {/* Sidebar com Calendário e Filtros */}
-                <div className="w-80 bg-slate-800 border-r border-slate-700 p-4 space-y-4">
+                <div className="w-80 bg-black border-r border-gray-800 p-4 space-y-4">
                   {/* Calendário */}
-                  <div className="bg-[#6FD6FF] rounded-lg p-3">
+                  <div className="bg-white rounded-lg p-3 border border-gray-200">
                     <div className="text-center mb-3">
-                      <h3 className="text-base font-semibold text-white">
+                      <h3 className="text-base font-semibold text-black">
                         setembro de 2025
                       </h3>
                     </div>
@@ -1123,12 +1129,12 @@ export default function AdminDashboard() {
 
                   {/* Filtros */}
                   <div className="space-y-3">
-                    <div className="flex items-center space-x-2 text-[#01ABFE]">
+                    <div className="flex items-center space-x-2 text-white">
                       <CogIcon className="w-5 h-5" />
                       <span className="font-medium">Buscar e Agendar</span>
                     </div>
 
-                    <div className="flex items-center space-x-2 text-[#01ABFE]">
+                    <div className="flex items-center space-x-2 text-white">
                       <CogIcon className="w-5 h-5" />
                       <span className="font-medium">Seleção de Profissionais</span>
                     </div>
@@ -1138,7 +1144,7 @@ export default function AdminDashboard() {
                       <div className="flex space-x-2">
                         <input
                           type="text"
-                          className="flex-1 px-2 py-1.5 bg-[#6FD6FF] border border-[#01ABFE] rounded text-white text-xs"
+                          className="flex-1 px-2 py-1.5 bg-gray-900 border border-gray-700 rounded text-white text-xs"
                           placeholder="Digite o nome"
                         />
                         <button className="px-2 py-1.5 bg-blue-600 text-white rounded text-xs">Todos</button>
@@ -1147,7 +1153,7 @@ export default function AdminDashboard() {
 
                     <div>
                       <label className="block text-xs text-slate-400 mb-1">Status do Agendamento</label>
-                      <select className="w-full px-2 py-1.5 bg-[#6FD6FF] border border-[#01ABFE] rounded text-white text-xs">
+                      <select className="w-full px-2 py-1.5 bg-gray-900 border border-gray-700 rounded text-white text-xs">
                         <option>Todos</option>
                         <option>Confirmado</option>
                         <option>Pendente</option>
@@ -1157,7 +1163,7 @@ export default function AdminDashboard() {
 
                     <div>
                       <label className="block text-xs text-slate-400 mb-1">Fechamento de Conta</label>
-                      <select className="w-full px-2 py-1.5 bg-[#6FD6FF] border border-[#01ABFE] rounded text-white text-xs">
+                      <select className="w-full px-2 py-1.5 bg-gray-900 border border-gray-700 rounded text-white text-xs">
                         <option>Todos</option>
                         <option>Pago</option>
                         <option>Pendente</option>
@@ -1166,7 +1172,7 @@ export default function AdminDashboard() {
 
                     <div>
                       <label className="block text-xs text-slate-400 mb-1">Tamanho da agenda</label>
-                      <select className="w-full px-2 py-1.5 bg-[#6FD6FF] border border-[#01ABFE] rounded text-white text-xs">
+                      <select className="w-full px-2 py-1.5 bg-gray-900 border border-gray-700 rounded text-white text-xs">
                         <option>Padrão</option>
                         <option>Compacta</option>
                         <option>Ampliada</option>
@@ -1175,7 +1181,7 @@ export default function AdminDashboard() {
 
                     <div>
                       <label className="block text-xs text-slate-400 mb-1">Exibição da agenda</label>
-                      <select className="w-full px-2 py-1.5 bg-[#6FD6FF] border border-[#01ABFE] rounded text-white text-xs">
+                      <select className="w-full px-2 py-1.5 bg-gray-900 border border-gray-700 rounded text-white text-xs">
                         <option>Dia</option>
                         <option>Semana</option>
                         <option>Mês</option>
@@ -1217,16 +1223,16 @@ export default function AdminDashboard() {
                           <input
                             type="text"
                             placeholder="Buscar clientes agendados hoje"
-                            className="w-80 px-4 py-2 pl-10 bg-[#6FD6FF] border border-[#01ABFE] rounded-lg text-white placeholder-slate-400"
+                            className="w-80 px-4 py-2 pl-10 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-400"
                           />
-                          <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                          <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                         </div>
                       </div>
                       <div className="flex items-center space-x-3">
                         <button
                           onClick={refreshAgenda}
                           disabled={isLoadingData}
-                          className="text-[#01ABFE] hover:text-[#0099E6] transition-colors disabled:opacity-50"
+                          className="text-gray-400 hover:text-white transition-colors disabled:opacity-50"
                           title="Atualizar agenda"
                         >
                           <svg
@@ -1238,7 +1244,7 @@ export default function AdminDashboard() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                           </svg>
                         </button>
-                        <button className="bg-[#6FD6FF] text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-600 transition-colors border border-[#01ABFE]">
+                        <button className="bg-gray-800 text-white px-6 py-3 rounded-lg font-medium hover:bg-gray-700 transition-colors border border-gray-700">
                           + Agendar
                         </button>
                       </div>
@@ -1246,12 +1252,12 @@ export default function AdminDashboard() {
                   </div>
 
                   {/* Cabeçalho dos Profissionais */}
-                  <div className="bg-slate-800 border-b border-slate-700">
+                  <div className="bg-gray-900 border-b border-gray-800">
                     <div className="flex">
-                      <div className="w-20 bg-[#6FD6FF] border-r border-slate-600 p-3">
-                        <div className="text-xs text-slate-400 text-center">Profissional</div>
+                      <div className="w-20 bg-gray-900 border-r border-gray-800 p-3">
+                        <div className="text-xs text-gray-400 text-center">Profissional</div>
                       </div>
-                      <div className="flex-1 bg-[#6FD6FF] p-3">
+                      <div className="flex-1 bg-gray-900 p-3">
                         <div className="flex items-center">
                           <span className="text-white font-medium">vitor</span>
                         </div>
@@ -1325,14 +1331,14 @@ export default function AdminDashboard() {
                               style={{ height: slotHeight }}
                             >
                               {/* Linha sólida na parte superior (divisão entre horários) */}
-                              <div className="absolute top-0 left-0 right-0 h-px bg-[#6FD6FF]"></div>
+                              <div className="absolute top-0 left-0 right-0 h-px bg-gray-700"></div>
 
                               {/* Linha pontilhada no meio da hora (9:30) */}
-                              <div className="absolute top-1/2 left-0 right-0 h-px bg-[#6FD6FF] border-dashed border-t"></div>
+                              <div className="absolute top-1/2 left-0 right-0 h-px bg-gray-700 border-dashed border-t"></div>
 
                               {/* Linha sólida na parte inferior (exceto na última hora) */}
                               {!isLastHour && (
-                                <div className="absolute bottom-0 left-0 right-0 h-px bg-[#6FD6FF]"></div>
+                                <div className="absolute bottom-0 left-0 right-0 h-px bg-gray-700"></div>
                               )}
 
                               {/* Aqui ficariam os agendamentos */}
@@ -1461,7 +1467,7 @@ export default function AdminDashboard() {
                             type="file"
                             accept="image/*"
                             onChange={(e) => handleFileChange('logoFile', e.target.files?.[0] || null)}
-                            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-[#6FD6FF] file:text-[#01ABFE] hover:file:bg-blue-600"
+                            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-[#4BC8FE] file:text-white hover:file:bg-[#3AB3E8]"
                           />
                           <p className="text-xs text-gray-500 mt-1">PNG, JPG até 2MB. Recomendado: 200x200px</p>
                         </div>
@@ -1493,8 +1499,8 @@ export default function AdminDashboard() {
                   </div>
 
                   {/* Horário de Funcionamento */}
-                  <div className="bg-slate-800 shadow-lg rounded-xl p-8 lg:col-span-2 border border-slate-700">
-                    <h3 className="text-lg font-medium text-white mb-6">Horário de Funcionamento</h3>
+                  <div className="bg-white shadow-lg rounded-xl p-8 lg:col-span-2 border border-gray-200">
+                    <h3 className="text-lg font-medium text-black mb-6">Horário de Funcionamento</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7 gap-6">
                       {['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'].map((day, index) => {
                         const dayNames = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
@@ -1503,7 +1509,7 @@ export default function AdminDashboard() {
 
                         return (
                           <div key={day} className="space-y-3">
-                            <div className="text-sm font-medium text-[#01ABFE] text-center">{day}</div>
+                            <div className="text-sm font-medium text-black text-center">{day}</div>
                             <div className="space-y-2">
                               <div className="flex items-center space-x-2">
                                 <input
@@ -1513,7 +1519,7 @@ export default function AdminDashboard() {
                                     ...configurations.openingHours,
                                     [dayKey]: { ...dayConfig, open: e.target.value }
                                   })}
-                                  className="w-full px-3 py-2 border border-[#01ABFE] bg-[#6FD6FF] text-white rounded text-sm focus:ring-2 focus:ring-[#01ABFE] focus:border-[#01ABFE]"
+                                  className="w-full px-3 py-2 border border-gray-300 bg-white text-black rounded text-sm focus:ring-2 focus:ring-[#4FC9FF] focus:border-[#4FC9FF]"
                                 />
                               </div>
                               <div className="flex items-center space-x-2">
@@ -1524,7 +1530,7 @@ export default function AdminDashboard() {
                                     ...configurations.openingHours,
                                     [dayKey]: { ...dayConfig, close: e.target.value }
                                   })}
-                                  className="w-full px-3 py-2 border border-[#01ABFE] bg-[#6FD6FF] text-white rounded text-sm focus:ring-2 focus:ring-[#01ABFE] focus:border-[#01ABFE]"
+                                  className="w-full px-3 py-2 border border-gray-300 bg-white text-black rounded text-sm focus:ring-2 focus:ring-[#4FC9FF] focus:border-[#4FC9FF]"
                                 />
                               </div>
                               <div className="flex items-center justify-center">
@@ -1535,9 +1541,9 @@ export default function AdminDashboard() {
                                     ...configurations.openingHours,
                                     [dayKey]: { ...dayConfig, closed: !e.target.checked }
                                   })}
-                                  className="h-4 w-4 text-[#01ABFE] focus:ring-[#01ABFE] border-slate-600 rounded bg-[#6FD6FF]"
+                                  className="h-4 w-4 text-[#4FC9FF] focus:ring-[#4FC9FF] border-gray-300 rounded bg-white"
                                 />
-                                <span className="ml-2 text-xs text-slate-400">Aberto</span>
+                                <span className="ml-2 text-xs text-gray-600">Aberto</span>
                               </div>
                             </div>
                           </div>
@@ -1546,17 +1552,22 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
-                  {/* Preview da URL Pública */}
+                  {/* Página pública da sua barbearia */}
                   <div className="bg-white shadow rounded-lg p-6 lg:col-span-2">
-                    <h3 className="text-lg font-medium text-gray-900 mb-4">Preview da URL Pública</h3>
+                    <h3 className="text-lg font-medium text-gray-900 mb-4">Página pública da sua barbearia</h3>
                     <div className="bg-gray-50 rounded-lg p-4">
                       <div className="flex items-center space-x-2 mb-2">
                         <Globe className="h-4 w-4 text-gray-500" />
                         <span className="text-sm font-medium text-gray-700">URL da sua barbearia:</span>
                       </div>
-                      <code className="text-sm text-[#01ABFE] bg-[#6FD6FF] px-2 py-1 rounded">
+                      <a
+                        href={`https://noxoraa.vercel.app/b/${configurations.slug}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-white bg-[#4FC9FF] px-2 py-1 rounded hover:bg-[#3AB3E8] transition-colors cursor-pointer inline-block"
+                      >
                         https://noxoraa.vercel.app/b/{configurations.slug}
-                      </code>
+                      </a>
                       <p className="text-xs text-gray-500 mt-2">
                         Esta é a URL que seus clientes usarão para fazer agendamentos.
                       </p>
@@ -1570,7 +1581,7 @@ export default function AdminDashboard() {
                     disabled={savingConfig}
                     className={`px-6 py-2 rounded-lg transition-colors flex items-center space-x-2 ${savingConfig
                       ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
-                      : 'bg-[#01ABFE] text-white hover:bg-[#0099E6] border border-[#01ABFE]'
+                      : 'bg-[#4BC8FE] text-white hover:bg-[#3AB3E8] border border-[#4BC8FE]'
                       }`}
                   >
                     {savingConfig ? (
@@ -1594,7 +1605,7 @@ export default function AdminDashboard() {
                   <h2 className="text-3xl font-bold text-white">Clientes</h2>
                   <button
                     onClick={loadClients}
-                    className="bg-[#01ABFE] text-white px-6 py-3 rounded-lg hover:bg-[#0099E6] border border-[#01ABFE] flex items-center font-medium transition-colors"
+                    className="bg-gray-800 text-white px-6 py-3 rounded-lg hover:bg-gray-700 border border-gray-700 flex items-center font-medium transition-colors"
                   >
                     Recarregar
                   </button>
@@ -1618,21 +1629,21 @@ export default function AdminDashboard() {
                     </div>
                   ) : (
                     <table className="w-full divide-y divide-slate-700">
-                      <thead className="bg-[#6FD6FF]">
+                      <thead className="bg-gray-900">
                         <tr>
-                          <th className="px-8 py-4 text-left text-xs font-medium text-[#01ABFE] uppercase tracking-wider">
+                          <th className="px-8 py-4 text-left text-xs font-medium text-white uppercase tracking-wider">
                             Cliente
                           </th>
-                          <th className="px-8 py-4 text-left text-xs font-medium text-[#01ABFE] uppercase tracking-wider">
+                          <th className="px-8 py-4 text-left text-xs font-medium text-white uppercase tracking-wider">
                             Email
                           </th>
-                          <th className="px-8 py-4 text-left text-xs font-medium text-[#01ABFE] uppercase tracking-wider">
+                          <th className="px-8 py-4 text-left text-xs font-medium text-white uppercase tracking-wider">
                             Telefone
                           </th>
-                          <th className="px-8 py-4 text-left text-xs font-medium text-[#01ABFE] uppercase tracking-wider">
+                          <th className="px-8 py-4 text-left text-xs font-medium text-white uppercase tracking-wider">
                             Data de Cadastro
                           </th>
-                          <th className="px-8 py-4 text-left text-xs font-medium text-[#01ABFE] uppercase tracking-wider">
+                          <th className="px-8 py-4 text-left text-xs font-medium text-white uppercase tracking-wider">
                             Ações
                           </th>
                         </tr>
@@ -1749,7 +1760,7 @@ export default function AdminDashboard() {
                         type="checkbox"
                         checked={serviceForm.is_active}
                         onChange={(e) => setServiceForm(prev => ({ ...prev, is_active: e.target.checked }))}
-                        className="h-4 w-4 text-[#01ABFE] focus:ring-[#01ABFE] border-gray-300 rounded"
+                        className="h-4 w-4 text-gray-400 focus:ring-gray-600 border-gray-600 rounded"
                       />
                       <label className="ml-2 block text-sm text-gray-900">
                         Serviço ativo
@@ -1844,7 +1855,7 @@ export default function AdminDashboard() {
                         type="checkbox"
                         checked={employeeForm.active}
                         onChange={(e) => setEmployeeForm(prev => ({ ...prev, active: e.target.checked }))}
-                        className="h-4 w-4 text-[#01ABFE] focus:ring-[#01ABFE] border-gray-300 rounded"
+                        className="h-4 w-4 text-gray-400 focus:ring-gray-600 border-gray-600 rounded"
                       />
                       <label className="ml-2 block text-sm text-gray-900">
                         Funcionário ativo
@@ -1996,8 +2007,8 @@ export default function AdminDashboard() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-8">
                 <div className="bg-white rounded-xl shadow-lg p-6">
                   <div className="flex items-center">
-                    <div className="w-12 h-12 bg-[#6FD6FF] rounded-lg flex items-center justify-center">
-                      <svg className="w-6 h-6 text-[#01ABFE]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="w-12 h-12 bg-gray-900 rounded-lg flex items-center justify-center">
+                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                       </svg>
                     </div>
@@ -2038,8 +2049,8 @@ export default function AdminDashboard() {
 
                 <div className="bg-white rounded-xl shadow-lg p-6">
                   <div className="flex items-center">
-                    <div className="w-12 h-12 bg-[#6FD6FF] rounded-lg flex items-center justify-center">
-                      <svg className="w-6 h-6 text-[#01ABFE]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="w-12 h-12 bg-gray-900 rounded-lg flex items-center justify-center">
+                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                       </svg>
                     </div>
@@ -2165,7 +2176,7 @@ export default function AdminDashboard() {
                         Suporte prioritário
                       </li>
                     </ul>
-                    <button className="w-full mt-4 bg-[#6FD6FF] text-white py-2 rounded-lg font-medium hover:bg-blue-600 transition-colors border border-[#01ABFE]">
+                    <button className="w-full mt-4 bg-gray-800 text-white py-2 rounded-lg font-medium hover:bg-gray-700 transition-colors border border-gray-700">
                       Fazer Upgrade
                     </button>
                   </div>
@@ -2242,7 +2253,7 @@ export default function AdminDashboard() {
                 </div>
 
                 <div className="mt-6 flex space-x-4">
-                  <button className="bg-[#6FD6FF] text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-600 transition-colors border border-[#01ABFE]">
+                  <button className="bg-gray-800 text-white px-6 py-2 rounded-lg font-medium hover:bg-gray-700 transition-colors border border-gray-700">
                     Alterar Método de Pagamento
                   </button>
                   <button className="bg-gray-100 text-gray-700 px-6 py-2 rounded-lg font-medium hover:bg-gray-200 transition-colors">
