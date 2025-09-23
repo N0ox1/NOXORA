@@ -52,7 +52,7 @@ export default function BarbershopSettingsPage() {
     address: 'Rua das Flores, 123 - Centro',
     phone: '(11) 99999-9999',
     email: 'contato@barberlabs.com',
-    instagram: '@barberlabs',
+    instagram: '',
     whatsapp: '11999999999',
     workingHours: {
       monday: { open: '09:00', close: '18:00', closed: false },
@@ -99,7 +99,7 @@ export default function BarbershopSettingsPage() {
         address: data.address || 'Rua das Flores, 123 - Centro',
         phone: data.phone || '(11) 99999-9999',
         email: data.email || 'contato@barberlabs.com',
-        instagram: data.instagram || '@barberlabs',
+        instagram: data.instagram || '',
         whatsapp: data.whatsapp || '11999999999',
         workingHours: workingHours || {
           monday: { open: '09:00', close: '18:00', closed: false },
@@ -125,13 +125,23 @@ export default function BarbershopSettingsPage() {
   async function saveSettings() {
     setSaving(true);
     try {
+      const normalized = {
+        ...settings,
+        instagram: (() => {
+          const v = settings.instagram || '';
+          if (!v) return '';
+          if (/^https?:\/\//i.test(v)) return v;
+          const handle = v.trim().replace(/^@+/, '').split(/[\s/]/)[0];
+          return `https://instagram.com/${handle}`;
+        })()
+      };
       const response = await fetch('/api/v1/barbershop/settings', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'x-tenant-id': tenantId
         },
-        body: JSON.stringify(settings)
+        body: JSON.stringify(normalized)
       });
 
       if (!response.ok) {
@@ -347,12 +357,12 @@ export default function BarbershopSettingsPage() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="instagram">Instagram</Label>
+                  <Label htmlFor="instagram">Link do Instagram</Label>
                   <Input
                     id="instagram"
                     value={settings.instagram}
                     onChange={(e) => setSettings(prev => ({ ...prev, instagram: e.target.value }))}
-                    placeholder="@barbearia"
+                    placeholder="https://instagram.com/suapagina"
                   />
                 </div>
               </div>

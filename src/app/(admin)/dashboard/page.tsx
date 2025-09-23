@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { toast } from 'react-hot-toast';
 import {
   PlusIcon,
@@ -64,28 +64,6 @@ interface Client {
 
 
 export default function AdminDashboard() {
-  // CSS para garantir uso de toda a largura
-  useEffect(() => {
-    const style = document.createElement('style');
-    style.textContent = `
-      .dashboard-container {
-        width: 100vw !important;
-        max-width: none !important;
-      }
-        .dashboard-content {
-          width: calc(100vw - 288px) !important;
-          max-width: none !important;
-          min-width: 0 !important;
-          flex: 1 !important;
-        }
-    `;
-    document.head.appendChild(style);
-    return () => {
-      if (document.head.contains(style)) {
-        document.head.removeChild(style);
-      }
-    };
-  }, []);
   const [activeTab, setActiveTab] = useState<'services' | 'employees' | 'agenda' | 'configurations' | 'clients' | 'subscriptions' | 'plan'>('services');
   const [services, setServices] = useState<Service[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -95,6 +73,76 @@ export default function AdminDashboard() {
   const [days, setDays] = useState<number>(7);
   const [filterEmp, setFilterEmp] = useState<string>('all');
   const [filterSvc, setFilterSvc] = useState<string>('all');
+
+  // Função para formatar horário HH:mm
+  const formatTime = (h: string | number, m: string | number): string => {
+    return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+  };
+
+  // Função para formatar string de horário
+  const formatTimeString = (timeString: string): string => {
+    if (!timeString) {
+      return timeString;
+    }
+
+    // Se tem ':', formatar normalmente
+    if (timeString.includes(':')) {
+      const [hours, minutes] = timeString.split(':');
+      if (hours && minutes) {
+        return formatTime(hours, minutes);
+      }
+    }
+
+    // Se não tem ':', assumir que é só horas e adicionar ':00'
+    if (timeString.length <= 2) {
+      return formatTime(timeString, '0');
+    }
+
+    // Se tem 3 dígitos sem ':', assumir HMM e converter para 0H:MM
+    if (timeString.length === 3 && !timeString.includes(':')) {
+      const hours = timeString.slice(0, 1);
+      const minutes = timeString.slice(1);
+      return formatTime(hours, minutes);
+    }
+
+    // Se tem 4 dígitos sem ':', assumir HHMM e converter para HH:MM
+    if (timeString.length === 4 && !timeString.includes(':')) {
+      const hours = timeString.slice(0, 2);
+      const minutes = timeString.slice(2);
+      return formatTime(hours, minutes);
+    }
+
+    return timeString;
+  };
+
+  // Máscara: mantém ':' fixo e aceita até 4 dígitos (HHMM)
+  const maskHHmm = (raw: string): string => {
+    const digits = raw.replace(/\D/g, '').slice(0, 4);
+    const hours = digits.slice(0, 2);
+    const minutes = digits.slice(2, 4);
+
+    if (hours.length === 0 && minutes.length === 0) {
+      return '';
+    }
+
+    // Monta valor mantendo ':' fixo; permite estados intermediários (ex: 09:, 09:3)
+    return `${hours}${':'}${minutes}`;
+  };
+
+  const isCompleteHHmm = (value: string): boolean => {
+    return /^\d{2}:\d{2}$/.test(value);
+  };
+
+  const allTimesComplete = (): boolean => {
+    const values = Object.values(configurations.openingHours);
+    return values.every(v => v.closed || (isCompleteHHmm(v.open) && isCompleteHHmm(v.close)));
+  };
+
+  const dayTimesComplete = (day: string): boolean => {
+    const dayData = configurations.openingHours[day as keyof typeof configurations.openingHours];
+    if (!dayData) return false;
+    return dayData.closed || (isCompleteHHmm(dayData.open) && isCompleteHHmm(dayData.close));
+  };
 
   // Função para obter horários de funcionamento do dia selecionado
   const getOperatingHours = () => {
@@ -127,6 +175,8 @@ export default function AdminDashboard() {
     instagram: '',
     logoFile: null as File | null,
     bannerFile: null as File | null,
+    logoUrl: '',
+    bannerUrl: '',
     openingHours: {
       monday: { open: '09:00', close: '18:00', closed: false },
       tuesday: { open: '09:00', close: '18:00', closed: false },
@@ -138,9 +188,82 @@ export default function AdminDashboard() {
     }
   });
   const [savingConfig, setSavingConfig] = useState(false);
+  const [imagesToRemove, setImagesToRemove] = useState<Set<string>>(new Set());
+  const [isRemovingImages, setIsRemovingImages] = useState(false);
+  const [autoSaveTimeout, setAutoSaveTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [lastEdited, setLastEdited] = useState<{ day: string; field: 'open' | 'close' } | null>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const bannerInputRef = useRef<HTMLInputElement>(null);
   const [userInfo, setUserInfo] = useState<{ tenantId: string; barbershopId: string } | null>(null);
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+
+  // CSS para garantir uso de toda a largura
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      .dashboard-container {
+        width: 100vw !important;
+        max-width: none !important;
+      }
+        .dashboard-content {
+          width: calc(100vw - 288px) !important;
+          max-width: none !important;
+          min-width: 0 !important;
+          flex: 1 !important;
+        }
+    `;
+    document.head.appendChild(style);
+    return () => {
+      if (document.head.contains(style)) {
+        document.head.removeChild(style);
+      }
+    };
+  }, []);
+
+  // Cleanup do timeout de auto-save
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimeout) {
+        clearTimeout(autoSaveTimeout);
+      }
+    };
+  }, [autoSaveTimeout]);
+
+  // Carregar aba ativa do localStorage após hidratação
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedTab = localStorage.getItem('activeTab') as any;
+      if (savedTab) {
+        setActiveTab(savedTab);
+      }
+    }
+  }, []);
+
+  // Salvar aba ativa no localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('activeTab', activeTab);
+    }
+  }, [activeTab]);
+
+  // Debug de renderização
+  useEffect(() => {
+    console.log('🔍 Renderização logo:', {
+      logoUrl: configurations.logoUrl,
+      logoFile: configurations.logoFile,
+      showRemoveButton: !!configurations.logoUrl
+    });
+  }, [configurations.logoUrl, configurations.logoFile]);
+
+  useEffect(() => {
+    console.log('🔍 Renderização banner:', {
+      bannerUrl: configurations.bannerUrl,
+      bannerFile: configurations.bannerFile,
+      showRemoveButton: !!configurations.bannerUrl
+    });
+  }, [configurations.bannerUrl, configurations.bannerFile]);
 
   // Estados para modais
   const [showServiceModal, setShowServiceModal] = useState(false);
@@ -189,6 +312,7 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     if (userInfo) {
+      console.log('🔄 useEffect userInfo executado - carregando dados...', { isRemovingImages });
       setIsLoadingData(true);
 
       // Carregar todos os dados em paralelo para melhor performance
@@ -254,12 +378,14 @@ export default function AdminDashboard() {
   // Funções para carregar dados reais
   const loadUserInfo = async () => {
     try {
+      console.log('🔍 Carregando informações do usuário...');
       const response = await fetch('/api/v1/auth/me', {
         credentials: 'include'
       });
 
       if (response.ok) {
         const data = await response.json();
+        console.log('👤 Usuário carregado:', data);
         setUserInfo({
           tenantId: data.user.tenantId,
           barbershopId: data.user.barbershopId
@@ -612,12 +738,6 @@ export default function AdminDashboard() {
     return hours > 0 ? `${hours}h${mins > 0 ? ` ${mins}min` : ''}` : `${mins}min`;
   };
 
-  const formatTime = (timeString: string) => {
-    return new Date(timeString).toLocaleTimeString('pt-BR', {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('pt-BR');
@@ -645,13 +765,126 @@ export default function AdminDashboard() {
       ...prev,
       [field]: value
     }));
+    triggerAutoSave();
   };
 
-  const handleFileChange = (field: 'logoFile' | 'bannerFile', file: File | null) => {
+  const handleFileChange = async (field: 'logoFile' | 'bannerFile', file: File | null) => {
+    console.log('📁 handleFileChange chamado:', { field, file: file?.name });
+
     setConfigurations(prev => ({
       ...prev,
       [field]: file
     }));
+
+    // Remover da lista de remoção se uma nova imagem for selecionada
+    if (file) {
+      const type = field === 'logoFile' ? 'logo' : 'banner';
+      setImagesToRemove(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(type);
+        return newSet;
+      });
+
+      // Criar preview imediato da imagem selecionada
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const result = e.target?.result as string;
+        const urlField = field === 'logoFile' ? 'logoUrl' : 'bannerUrl';
+        console.log('🖼️ Preview criado:', { urlField, result: result.substring(0, 50) + '...' });
+        setConfigurations(prev => ({
+          ...prev,
+          [urlField]: result
+        }));
+      };
+      reader.readAsDataURL(file);
+
+      // Fazer upload imediato da imagem
+      try {
+        const uploadedUrl = await uploadImage(file, type);
+        if (uploadedUrl) {
+          const urlField = field === 'logoFile' ? 'logoUrl' : 'bannerUrl';
+          console.log('✅ Upload concluído:', { urlField, uploadedUrl });
+          setConfigurations(prev => ({
+            ...prev,
+            [urlField]: uploadedUrl
+          }));
+          toast.success('Imagem carregada automaticamente!');
+        }
+      } catch (error) {
+        console.error('Erro no upload automático:', error);
+      }
+    }
+  };
+
+  // Função para fazer upload de imagem
+  const uploadImage = async (file: File, type: 'logo' | 'banner') => {
+    if (!userInfo) return null;
+
+    const formData = new FormData();
+    formData.append('image', file);
+    formData.append('type', type);
+
+    try {
+      const response = await fetch('/api/v1/barbershop/upload-image', {
+        method: 'POST',
+        headers: {
+          'x-tenant-id': userInfo.tenantId || ''
+        },
+        credentials: 'include',
+        body: formData
+      });
+
+      if (!response.ok) {
+        throw new Error('Erro ao fazer upload da imagem');
+      }
+
+      const data = await response.json();
+      return data.url;
+    } catch (error) {
+      console.error('Erro no upload:', error);
+      toast.error('Erro ao fazer upload da imagem');
+      return null;
+    }
+  };
+
+  // Função para remover imagem
+  const removeImage = (type: 'logo' | 'banner') => {
+    console.log('🗑️ removeImage chamado:', { type });
+
+    // Marcar para remoção
+    setImagesToRemove(prev => {
+      const newSet = new Set(prev);
+      newSet.add(type);
+      console.log('➕ Adicionando à lista de remoção:', { type, newSet: Array.from(newSet) });
+      return newSet;
+    });
+    setIsRemovingImages(true);
+
+    // Limpar a URL e arquivo imediatamente
+    const urlField = type === 'logo' ? 'logoUrl' : 'bannerUrl';
+    console.log('🧹 Limpando estado local:', { urlField });
+
+    setConfigurations(prev => ({
+      ...prev,
+      [`${type}File`]: null,
+      [urlField]: ''
+    }));
+
+    // Limpar o input de arquivo
+    if (type === 'logo' && logoInputRef.current) {
+      logoInputRef.current.value = '';
+    } else if (type === 'banner' && bannerInputRef.current) {
+      bannerInputRef.current.value = '';
+    }
+
+    // Aguardar um tick para garantir que o estado seja atualizado
+    setTimeout(() => {
+      console.log('⏰ Executando auto-save após remoção...');
+      // Chamar saveConfigurations diretamente com o tipo marcado para remoção
+      saveConfigurations(true, type);
+    }, 0);
+
+    toast.success('Imagem removida!');
   };
 
   const generateSlug = (name: string) => {
@@ -665,6 +898,32 @@ export default function AdminDashboard() {
       .trim();
   };
 
+  // Função de auto-save com debounce
+  const triggerAutoSave = () => {
+    console.log('⏰ triggerAutoSave chamado');
+
+    if (autoSaveTimeout) {
+      clearTimeout(autoSaveTimeout);
+    }
+
+    const timeout = setTimeout(async () => {
+      console.log('⏰ Auto-save executando...', { imagesToRemove: Array.from(imagesToRemove), lastEdited });
+      if (lastEdited) {
+        if (dayTimesComplete(lastEdited.day)) {
+          await saveConfigurations(true); // true = auto-save mode
+        } else {
+          console.log('⏭️ Auto-save adiado: dia editado incompleto', lastEdited);
+        }
+      } else if (allTimesComplete()) {
+        await saveConfigurations(true);
+      } else {
+        console.log('⏭️ Auto-save adiado: horários incompletos');
+      }
+    }, 2000); // 2 segundos de delay
+
+    setAutoSaveTimeout(timeout);
+  };
+
   const handleSlugChange = (name: string) => {
     const newSlug = generateSlug(name);
     setConfigurations(prev => ({
@@ -672,12 +931,24 @@ export default function AdminDashboard() {
       name,
       slug: newSlug
     }));
+    triggerAutoSave();
+  };
+
+  const normalizeInstagramUrl = (value: string): string => {
+    if (!value) return '';
+    const trimmed = value.trim();
+    // já é URL
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+    // remove @ e espaços
+    const handle = trimmed.replace(/^@+/, '').split(/[\s/]/)[0];
+    return `https://instagram.com/${handle}`;
   };
 
   // Carregar configurações
   const loadConfigurations = async () => {
     if (!userInfo) return;
 
+    console.log('🔄 Carregando configurações...', new Error().stack);
     try {
       const response = await fetch('/api/v1/barbershop/settings', {
         headers: { 'x-tenant-id': userInfo?.tenantId || '' },
@@ -691,22 +962,96 @@ export default function AdminDashboard() {
 
       const data = await response.json();
 
+      console.log('📊 Dados carregados do servidor:', {
+        name: data.name,
+        slug: data.slug,
+        description: data.description,
+        address: data.address,
+        phone: data.phone,
+        email: data.email,
+        instagram: data.instagram,
+        logoUrl: data.logoUrl,
+        bannerUrl: data.bannerUrl,
+        workingHours: data.workingHours
+      });
+      console.log('⏰ Horários de funcionamento do servidor:', data.workingHours);
+
+      console.log('🖼️ URLs de imagem do servidor:', {
+        logoUrl: data.logoUrl,
+        bannerUrl: data.bannerUrl,
+        logoUrlType: typeof data.logoUrl,
+        bannerUrlType: typeof data.bannerUrl
+      });
+
       // Parse workingHours se for string
       const workingHours = typeof data.workingHours === 'string'
         ? JSON.parse(data.workingHours)
         : data.workingHours;
 
-      setConfigurations(prev => ({
-        ...prev,
-        name: data.name || prev.name,
-        slug: data.slug || prev.slug,
-        description: data.description || prev.description,
-        address: data.address || prev.address,
-        phone: data.phone || prev.phone,
-        email: data.email || prev.email,
-        instagram: data.instagram || prev.instagram,
-        openingHours: workingHours || prev.openingHours
-      }));
+      // Só atualizar se não houver mudanças locais pendentes
+      const hasLocalChanges = configurations.logoFile || configurations.bannerFile || imagesToRemove.size > 0 || isRemovingImages;
+
+      console.log('🔍 Verificando mudanças locais:', {
+        hasLocalChanges,
+        logoFile: !!configurations.logoFile,
+        bannerFile: !!configurations.bannerFile,
+        imagesToRemove: Array.from(imagesToRemove),
+        isRemovingImages,
+        currentLogoUrl: configurations.logoUrl,
+        currentBannerUrl: configurations.bannerUrl
+      });
+
+      if (!hasLocalChanges) {
+        console.log('✅ Atualizando configurações do servidor...');
+        setConfigurations(prev => {
+          const newConfig = {
+            ...prev,
+            name: data.name || prev.name,
+            slug: data.slug || prev.slug,
+            description: data.description || prev.description,
+            address: data.address || prev.address,
+            phone: data.phone || prev.phone,
+            email: data.email || prev.email,
+            instagram: data.instagram || prev.instagram,
+            // Atualizar URLs do servidor
+            logoUrl: data.logoUrl || prev.logoUrl,
+            bannerUrl: data.bannerUrl || prev.bannerUrl,
+            openingHours: workingHours ? Object.keys(workingHours).reduce((acc: any, day) => {
+              const dayData = workingHours[day];
+              return {
+                ...acc,
+                [day]: {
+                  ...dayData,
+                  open: formatTimeString(dayData.open),
+                  close: formatTimeString(dayData.close)
+                }
+              };
+            }, {}) : prev.openingHours
+          };
+          console.log('🔄 Configurações atualizadas:', {
+            logoUrl: newConfig.logoUrl,
+            bannerUrl: newConfig.bannerUrl,
+            prevLogoUrl: prev.logoUrl,
+            dataLogoUrl: data.logoUrl
+          });
+
+          // Limpar inputs de arquivo (não podemos definir nomes programaticamente)
+          if (logoInputRef.current) {
+            logoInputRef.current.value = '';
+          }
+
+          if (bannerInputRef.current) {
+            bannerInputRef.current.value = '';
+          }
+
+          return newConfig;
+        });
+      } else {
+        console.log('⚠️ Ignorando carregamento de configurações - há mudanças locais pendentes');
+      }
+
+      // NÃO limpar imagesToRemove aqui - pode estar sendo limpo muito cedo
+      // setImagesToRemove(new Set());
 
 
 
@@ -716,11 +1061,119 @@ export default function AdminDashboard() {
     }
   };
 
-  const saveConfigurations = async () => {
+  const saveConfigurations = async (isAutoSave = false, typeToRemove?: string) => {
     if (!userInfo) return;
 
-    setSavingConfig(true);
+    console.log('💾 Salvando configurações...', { isAutoSave });
+    if (!isAutoSave) {
+      setSavingConfig(true);
+    }
     try {
+      // Se não é uma remoção de imagem, garantir que horários estão completos
+      if (!typeToRemove) {
+        if (lastEdited) {
+          if (!dayTimesComplete(lastEdited.day)) {
+            console.log('⏭️ Salvamento cancelado: dia editado incompleto', lastEdited);
+            return;
+          }
+        } else if (!allTimesComplete()) {
+          console.log('⏭️ Salvamento cancelado: horários incompletos');
+          return;
+        }
+      }
+      // Formatar horários antes de enviar
+      const normalizedHours = Object.keys(configurations.openingHours).reduce((acc: any, day) => {
+        const dayData = configurations.openingHours[day as keyof typeof configurations.openingHours];
+        return {
+          ...acc,
+          [day]: {
+            ...dayData,
+            open: formatTimeString(dayData.open),
+            close: formatTimeString(dayData.close)
+          }
+        };
+      }, {});
+      // Fazer upload das imagens se houver arquivos selecionados
+      let logoUrl = configurations.logoUrl;
+      let bannerUrl = configurations.bannerUrl;
+
+      console.log('🖼️ Salvando configurações com imagens:', {
+        logoFile: !!configurations.logoFile,
+        bannerFile: !!configurations.bannerFile,
+        logoUrl: configurations.logoUrl,
+        bannerUrl: configurations.bannerUrl,
+        imagesToRemove: Array.from(imagesToRemove)
+      });
+
+      if (configurations.logoFile && !imagesToRemove.has('logo') && typeToRemove !== 'logo') {
+        console.log('📤 Fazendo upload da logo...');
+        const uploadedLogoUrl = await uploadImage(configurations.logoFile, 'logo');
+        if (uploadedLogoUrl) {
+          logoUrl = uploadedLogoUrl;
+          console.log('✅ Logo uploadada:', uploadedLogoUrl);
+        }
+      } else if (imagesToRemove.has('logo') || typeToRemove === 'logo') {
+        console.log('⏭️ Pulando upload da logo - marcada para remoção');
+      }
+
+      if (configurations.bannerFile && !imagesToRemove.has('banner') && typeToRemove !== 'banner') {
+        console.log('📤 Fazendo upload do banner...');
+        const uploadedBannerUrl = await uploadImage(configurations.bannerFile, 'banner');
+        if (uploadedBannerUrl) {
+          bannerUrl = uploadedBannerUrl;
+          console.log('✅ Banner uploadado:', uploadedBannerUrl);
+        }
+      } else if (imagesToRemove.has('banner') || typeToRemove === 'banner') {
+        console.log('⏭️ Pulando upload do banner - marcado para remoção');
+      }
+
+      console.log('💾 Enviando dados para API:', {
+        logoUrl,
+        bannerUrl,
+        name: configurations.name,
+        slug: configurations.slug,
+        description: configurations.description,
+        address: configurations.address,
+        phone: configurations.phone,
+        email: configurations.email,
+        workingHours: normalizedHours,
+        instagram: normalizeInstagramUrl(configurations.instagram)
+      });
+      console.log('⏰ Horários sendo enviados:', normalizedHours);
+
+      // Verificar se logoUrl está sendo enviado corretamente
+      if (logoUrl) {
+        console.log('✅ LogoUrl sendo enviado para API:', logoUrl);
+      } else {
+        console.log('❌ LogoUrl está vazio - não será salvo');
+      }
+
+      const payload: any = {
+        name: configurations.name,
+        slug: configurations.slug,
+        description: configurations.description,
+        address: configurations.address,
+        phone: configurations.phone,
+        email: configurations.email,
+        workingHours: normalizedHours
+      };
+      // instagram: enviar só se houver valor normalizado
+      const normalizedInsta = normalizeInstagramUrl(configurations.instagram);
+      if (normalizedInsta) {
+        payload.instagram = normalizedInsta;
+      }
+      // logo/banner: enviar apenas quando existir valor ou quando explicitamente removido
+      if (typeToRemove === 'logo') {
+        payload.logoUrl = '';
+      } else if (logoUrl) {
+        payload.logoUrl = logoUrl;
+      }
+      if (typeToRemove === 'banner') {
+        payload.bannerUrl = '';
+      } else if (bannerUrl) {
+        payload.bannerUrl = bannerUrl;
+      }
+
       const response = await fetch('/api/v1/barbershop/settings', {
         method: 'PUT',
         headers: {
@@ -728,16 +1181,7 @@ export default function AdminDashboard() {
           'x-tenant-id': userInfo?.tenantId || ''
         },
         credentials: 'include',
-        body: JSON.stringify({
-          name: configurations.name,
-          slug: configurations.slug,
-          description: configurations.description,
-          address: configurations.address,
-          phone: configurations.phone,
-          email: configurations.email,
-          instagram: configurations.instagram,
-          workingHours: configurations.openingHours
-        })
+        body: JSON.stringify(payload)
       });
 
       if (!response.ok) {
@@ -745,12 +1189,117 @@ export default function AdminDashboard() {
         throw new Error(errorData.message || 'Erro ao salvar configurações');
       }
 
-      toast.success('Configurações salvas com sucesso!');
+      // Remover imagens marcadas para remoção do servidor
+      const removedImages = new Set<string>();
+
+      // Se typeToRemove foi passado, remover essa imagem
+      if (typeToRemove) {
+        try {
+          await fetch('/api/v1/barbershop/remove-image', {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-tenant-id': userInfo.tenantId || ''
+            },
+            credentials: 'include',
+            body: JSON.stringify({ type: typeToRemove })
+          });
+          console.log(`🗑️ Imagem ${typeToRemove} removida do servidor`);
+          removedImages.add(typeToRemove);
+        } catch (error) {
+          console.error(`Erro ao remover imagem ${typeToRemove}:`, error);
+        }
+      }
+
+      // Remover outras imagens marcadas para remoção
+      for (const typeToRemoveItem of imagesToRemove) {
+        if (typeToRemoveItem !== typeToRemove) {
+          try {
+            await fetch('/api/v1/barbershop/remove-image', {
+              method: 'DELETE',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-tenant-id': userInfo.tenantId || ''
+              },
+              credentials: 'include',
+              body: JSON.stringify({ type: typeToRemoveItem })
+            });
+            console.log(`🗑️ Imagem ${typeToRemoveItem} removida do servidor`);
+            removedImages.add(typeToRemoveItem);
+          } catch (error) {
+            console.error(`Erro ao remover imagem ${typeToRemoveItem}:`, error);
+          }
+        }
+      }
+
+      // Limpar apenas as imagens que foram realmente removidas do servidor
+      console.log('🧹 Limpando imagens removidas:', {
+        removedImages: Array.from(removedImages),
+        remainingImages: Array.from(imagesToRemove).filter(type => !removedImages.has(type))
+      });
+
+      setImagesToRemove(prev => {
+        const newSet = new Set(prev);
+        removedImages.forEach(type => newSet.delete(type));
+        return newSet;
+      });
+
+      // Desativar flag de remoção após salvar com delay
+      setTimeout(() => {
+        setIsRemovingImages(false);
+        console.log('✅ Flag de remoção desativado');
+      }, 1000); // 1 segundo de delay
+
+      // Atualizar estado local com as URLs das imagens
+      // Se a imagem foi realmente removida do servidor, limpar a URL
+      const finalLogoUrl = (removedImages.has('logo') || typeToRemove === 'logo') ? '' : logoUrl;
+      const finalBannerUrl = (removedImages.has('banner') || typeToRemove === 'banner') ? '' : bannerUrl;
+
+      console.log('🔄 Atualizando estado local:', {
+        finalLogoUrl,
+        finalBannerUrl,
+        removedImages: Array.from(removedImages)
+      });
+
+      setConfigurations(prev => ({
+        ...prev,
+        logoUrl: finalLogoUrl,
+        bannerUrl: finalBannerUrl,
+        logoFile: null,
+        bannerFile: null
+      }));
+
+      // Limpar inputs de arquivo após salvar
+      if (logoInputRef.current) {
+        logoInputRef.current.value = '';
+      }
+      if (bannerInputRef.current) {
+        bannerInputRef.current.value = '';
+      }
+
+      // NÃO limpar imagesToRemove aqui - deixar para ser limpo apenas quando realmente salvar
+      // setImagesToRemove(new Set());
+
+      // Atualizar timestamp do último salvamento
+      setLastSaved(new Date());
+
+      if (!isAutoSave) {
+        toast.success('Configurações salvas com sucesso!');
+      } else {
+        // Toast sutil para auto-save
+        toast.success('Salvo automaticamente', { duration: 1500 });
+      }
     } catch (error) {
       console.error('Erro ao salvar configurações:', error);
-      toast.error(error instanceof Error ? error.message : 'Erro ao salvar configurações');
+      if (!isAutoSave) {
+        toast.error(error instanceof Error ? error.message : 'Erro ao salvar configurações');
+      } else {
+        toast.error('Erro no auto-save', { duration: 2000 });
+      }
     } finally {
-      setSavingConfig(false);
+      if (!isAutoSave) {
+        setSavingConfig(false);
+      }
     }
   };
 
@@ -1441,13 +1990,13 @@ export default function AdminDashboard() {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Instagram</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Link do Instagram</label>
                         <input
                           type="text"
                           value={configurations.instagram}
                           onChange={(e) => handleConfigChange('instagram', e.target.value)}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          placeholder="@barbearia"
+                          placeholder="https://instagram.com/suapagina"
                         />
                       </div>
                     </div>
@@ -1458,17 +2007,36 @@ export default function AdminDashboard() {
                     <h3 className="text-lg font-medium text-gray-900 mb-4">Logo da Barbearia</h3>
                     <div className="space-y-4">
                       <div className="flex items-center space-x-4">
-                        <div className="w-20 h-20 bg-gray-100 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300">
-                          <ImageIcon className="h-8 w-8 text-gray-400" />
+                        <div className="w-20 h-20 bg-gray-100 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300 overflow-hidden">
+                          {configurations.logoUrl ? (
+                            <img
+                              src={configurations.logoUrl}
+                              alt="Logo da barbearia"
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <ImageIcon className="h-8 w-8 text-gray-400" />
+                          )}
                         </div>
                         <div className="flex-1">
                           <label className="block text-sm font-medium text-gray-700 mb-2">Upload do Logo</label>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => handleFileChange('logoFile', e.target.files?.[0] || null)}
-                            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-[#4BC8FE] file:text-white hover:file:bg-[#3AB3E8]"
-                          />
+                          <div className="flex space-x-2">
+                            <input
+                              ref={logoInputRef}
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => handleFileChange('logoFile', e.target.files?.[0] || null)}
+                              className="flex-1 text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-[#4fc9ff] file:text-white hover:file:bg-blue-600"
+                            />
+                            {configurations.logoUrl && (
+                              <button
+                                onClick={() => removeImage('logo')}
+                                className="px-3 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm font-medium"
+                              >
+                                Remover
+                              </button>
+                            )}
+                          </div>
                           <p className="text-xs text-gray-500 mt-1">PNG, JPG até 2MB. Recomendado: 200x200px</p>
                         </div>
                       </div>
@@ -1479,20 +2047,39 @@ export default function AdminDashboard() {
                   <div className="bg-white shadow-lg rounded-xl p-8">
                     <h3 className="text-lg font-medium text-gray-900 mb-4">Banner da Barbearia</h3>
                     <div className="space-y-4">
-                      <div className="w-full h-32 bg-gray-100 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300">
-                        <div className="text-center">
-                          <ImageIcon className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-                          <p className="text-sm text-gray-500">Banner Preview</p>
-                        </div>
+                      <div className="w-full h-32 bg-gray-100 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300 overflow-hidden">
+                        {configurations.bannerUrl ? (
+                          <img
+                            src={configurations.bannerUrl}
+                            alt="Banner da barbearia"
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="text-center">
+                            <ImageIcon className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                            <p className="text-sm text-gray-500">Banner Preview</p>
+                          </div>
+                        )}
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Upload do Banner</label>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => handleFileChange('bannerFile', e.target.files?.[0] || null)}
-                          className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-[#6FD6FF] file:text-[#01ABFE] hover:file:bg-blue-600"
-                        />
+                        <div className="flex space-x-2">
+                          <input
+                            ref={bannerInputRef}
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => handleFileChange('bannerFile', e.target.files?.[0] || null)}
+                            className="flex-1 text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-[#4fc9ff] file:text-white hover:file:bg-blue-600"
+                          />
+                          {configurations.bannerUrl && (
+                            <button
+                              onClick={() => removeImage('banner')}
+                              className="px-3 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm font-medium"
+                            >
+                              Remover
+                            </button>
+                          )}
+                        </div>
                         <p className="text-xs text-gray-500 mt-1">PNG, JPG até 5MB. Recomendado: 1200x400px</p>
                       </div>
                     </div>
@@ -1513,24 +2100,68 @@ export default function AdminDashboard() {
                             <div className="space-y-2">
                               <div className="flex items-center space-x-2">
                                 <input
-                                  type="time"
+                                  type="text"
+                                  placeholder="09:00"
                                   value={dayConfig.open}
-                                  onChange={(e) => handleConfigChange('openingHours', {
-                                    ...configurations.openingHours,
-                                    [dayKey]: { ...dayConfig, open: e.target.value }
-                                  })}
-                                  className="w-full px-3 py-2 border border-gray-300 bg-white text-black rounded text-sm focus:ring-2 focus:ring-[#4FC9FF] focus:border-[#4FC9FF]"
+                                  maxLength={5}
+                                  onChange={(e) => {
+                                    const value = maskHHmm(e.target.value);
+                                    setLastEdited({ day: dayKey, field: 'open' });
+                                    console.log(`⏰ Input ${dayKey} OPEN - valor:`, value);
+                                    handleConfigChange('openingHours', {
+                                      ...configurations.openingHours,
+                                      [dayKey]: { ...dayConfig, open: value }
+                                    });
+                                    if (isCompleteHHmm(value)) {
+                                      setTimeout(() => saveConfigurations(true), 0);
+                                    }
+                                  }}
+                                  onKeyDown={(e) => {
+                                    // Permitir apenas números, backspace, delete, arrow keys
+                                    if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) {
+                                      e.preventDefault();
+                                    }
+                                  }}
+                                  className="w-full px-3 py-2 border border-gray-300 bg-white text-black rounded text-sm focus:ring-2 focus:ring-[#4FC9FF] focus:border-[#4FC9FF] font-mono"
+                                  onBlur={() => {
+                                    setLastEdited({ day: dayKey, field: 'open' });
+                                    if (dayTimesComplete(dayKey)) {
+                                      saveConfigurations(true);
+                                    }
+                                  }}
                                 />
                               </div>
                               <div className="flex items-center space-x-2">
                                 <input
-                                  type="time"
+                                  type="text"
+                                  placeholder="18:00"
                                   value={dayConfig.close}
-                                  onChange={(e) => handleConfigChange('openingHours', {
-                                    ...configurations.openingHours,
-                                    [dayKey]: { ...dayConfig, close: e.target.value }
-                                  })}
-                                  className="w-full px-3 py-2 border border-gray-300 bg-white text-black rounded text-sm focus:ring-2 focus:ring-[#4FC9FF] focus:border-[#4FC9FF]"
+                                  maxLength={5}
+                                  onChange={(e) => {
+                                    const value = maskHHmm(e.target.value);
+                                    setLastEdited({ day: dayKey, field: 'close' });
+                                    console.log(`⏰ Input ${dayKey} CLOSE - valor:`, value);
+                                    handleConfigChange('openingHours', {
+                                      ...configurations.openingHours,
+                                      [dayKey]: { ...dayConfig, close: value }
+                                    });
+                                    if (isCompleteHHmm(value)) {
+                                      setTimeout(() => saveConfigurations(true), 0);
+                                    }
+                                  }}
+                                  onKeyDown={(e) => {
+                                    // Permitir apenas números, backspace, delete, arrow keys
+                                    if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) {
+                                      e.preventDefault();
+                                    }
+                                  }}
+                                  className="w-full px-3 py-2 border border-gray-300 bg-white text-black rounded text-sm focus:ring-2 focus:ring-[#4FC9FF] focus:border-[#4FC9FF] font-mono"
+                                  onBlur={() => {
+                                    setLastEdited({ day: dayKey, field: 'close' });
+                                    if (dayTimesComplete(dayKey)) {
+                                      saveConfigurations(true);
+                                    }
+                                  }}
                                 />
                               </div>
                               <div className="flex items-center justify-center">
@@ -1575,26 +2206,26 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                <div className="mt-6 flex justify-end">
-                  <button
-                    onClick={saveConfigurations}
-                    disabled={savingConfig}
-                    className={`px-6 py-2 rounded-lg transition-colors flex items-center space-x-2 ${savingConfig
-                      ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
-                      : 'bg-[#4BC8FE] text-white hover:bg-[#3AB3E8] border border-[#4BC8FE]'
-                      }`}
-                  >
+                {/* Status do Auto-Save */}
+                <div className="mt-6 flex justify-center">
+                  <div className="flex items-center space-x-2 text-sm text-gray-500">
                     {savingConfig ? (
                       <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
                         <span>Salvando...</span>
+                      </>
+                    ) : lastSaved ? (
+                      <>
+                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                        <span>Última alteração salva em {lastSaved.toLocaleTimeString('pt-BR')}</span>
                       </>
                     ) : (
                       <>
-                        <span>Salvar Configurações</span>
+                        <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+                        <span>Alterações serão salvas automaticamente</span>
                       </>
                     )}
-                  </button>
+                  </div>
                 </div>
               </div>
             )}
