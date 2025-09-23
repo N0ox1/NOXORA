@@ -81,6 +81,7 @@ export async function GET(req: NextRequest) {
                 id: barbershop.id,
                 name: barbershop.name,
                 slug: barbershop.slug,
+                instagram: barbershop.instagram,
                 logoUrl: barbershop.logoUrl,
                 bannerUrl: barbershop.bannerUrl
             });
@@ -127,6 +128,8 @@ export async function GET(req: NextRequest) {
         };
 
         console.log('📤 Resposta da API:', {
+            instagram: barbershopWithMockFields.instagram,
+            instagramType: typeof barbershopWithMockFields.instagram,
             logoUrl: barbershopWithMockFields.logoUrl,
             bannerUrl: barbershopWithMockFields.bannerUrl,
             logoUrlType: typeof barbershopWithMockFields.logoUrl,
@@ -194,15 +197,35 @@ export async function PUT(req: NextRequest) {
         };
 
         // Atualizar instagram somente se enviado
+        console.log('📱 Verificando Instagram recebido:', {
+            instagram: body.instagram,
+            instagramType: typeof body.instagram
+        });
         if (typeof body.instagram === 'string') {
             updateData.instagram = body.instagram;
+            console.log('✅ Instagram adicionado ao updateData:', body.instagram);
+        } else {
+            console.log('❌ Instagram não adicionado - tipo:', typeof body.instagram, 'valor:', body.instagram);
         }
         // Atualizar logo/banner somente se enviados
+        console.log('🖼️ Verificando URLs de imagem recebidas:', {
+            logoUrl: body.logoUrl,
+            bannerUrl: body.bannerUrl,
+            logoUrlType: typeof body.logoUrl,
+            bannerUrlType: typeof body.bannerUrl
+        });
+
         if (typeof body.logoUrl === 'string') {
             updateData.logoUrl = body.logoUrl;
+            console.log('✅ LogoUrl adicionada ao updateData:', body.logoUrl);
+        } else {
+            console.log('❌ LogoUrl não adicionada - tipo:', typeof body.logoUrl, 'valor:', body.logoUrl);
         }
         if (typeof body.bannerUrl === 'string') {
             updateData.bannerUrl = body.bannerUrl;
+            console.log('✅ BannerUrl adicionada ao updateData:', body.bannerUrl);
+        } else {
+            console.log('❌ BannerUrl não adicionada - tipo:', typeof body.bannerUrl, 'valor:', body.bannerUrl);
         }
 
         console.log('💾 Salvando no banco de dados:', updateData);

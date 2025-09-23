@@ -191,6 +191,7 @@ export default function AdminDashboard() {
   const [imagesToRemove, setImagesToRemove] = useState<Set<string>>(new Set());
   const [isRemovingImages, setIsRemovingImages] = useState(false);
   const [autoSaveTimeout, setAutoSaveTimeout] = useState<NodeJS.Timeout | null>(null);
+  const instagramRef = useRef<string>('');
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [lastEdited, setLastEdited] = useState<{ day: string; field: 'open' | 'close' } | null>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
@@ -761,10 +762,18 @@ export default function AdminDashboard() {
 
   // Funções para configurações
   const handleConfigChange = (field: string, value: any) => {
+    console.log('📝 handleConfigChange chamado:', { field, value });
     setConfigurations(prev => ({
       ...prev,
       [field]: value
     }));
+
+    // Atualizar ref para Instagram
+    if (field === 'instagram') {
+      instagramRef.current = value;
+      console.log('📱 Instagram ref atualizada:', value);
+    }
+
     triggerAutoSave();
   };
 
@@ -809,6 +818,12 @@ export default function AdminDashboard() {
             [urlField]: uploadedUrl
           }));
           toast.success('Imagem carregada automaticamente!');
+
+          // Salvar automaticamente após upload
+          console.log('💾 Salvando automaticamente após upload...');
+          setTimeout(() => {
+            saveConfigurations(true, undefined, uploadedUrl, type === 'logo' ? 'logo' : 'banner');
+          }, 100);
         }
       } catch (error) {
         console.error('Erro no upload automático:', error);
@@ -835,14 +850,22 @@ export default function AdminDashboard() {
       });
 
       if (!response.ok) {
-        throw new Error('Erro ao fazer upload da imagem');
+        let serverMessage = 'Erro ao fazer upload da imagem';
+        try {
+          const data = await response.json();
+          if (data?.error) serverMessage = data.error;
+        } catch (_) {
+          // ignore parse error and use default message
+        }
+        throw new Error(serverMessage);
       }
 
       const data = await response.json();
       return data.url;
     } catch (error) {
       console.error('Erro no upload:', error);
-      toast.error('Erro ao fazer upload da imagem');
+      const message = error instanceof Error ? error.message : 'Erro ao fazer upload da imagem';
+      toast.error(message);
       return null;
     }
   };
@@ -907,15 +930,22 @@ export default function AdminDashboard() {
     }
 
     const timeout = setTimeout(async () => {
-      console.log('⏰ Auto-save executando...', { imagesToRemove: Array.from(imagesToRemove), lastEdited });
+      // Usar ref para capturar o valor atual do Instagram
+      const currentInstagram = instagramRef.current;
+      console.log('⏰ Auto-save executando...', {
+        imagesToRemove: Array.from(imagesToRemove),
+        lastEdited,
+        currentInstagram,
+        configurationsInstagram: configurations.instagram
+      });
       if (lastEdited) {
         if (dayTimesComplete(lastEdited.day)) {
-          await saveConfigurations(true); // true = auto-save mode
+          await saveConfigurations(true, undefined, undefined, undefined, currentInstagram); // true = auto-save mode
         } else {
           console.log('⏭️ Auto-save adiado: dia editado incompleto', lastEdited);
         }
       } else if (allTimesComplete()) {
-        await saveConfigurations(true);
+        await saveConfigurations(true, undefined, undefined, undefined, currentInstagram);
       } else {
         console.log('⏭️ Auto-save adiado: horários incompletos');
       }
@@ -970,6 +1000,7 @@ export default function AdminDashboard() {
         phone: data.phone,
         email: data.email,
         instagram: data.instagram,
+        instagramType: typeof data.instagram,
         logoUrl: data.logoUrl,
         bannerUrl: data.bannerUrl,
         workingHours: data.workingHours
@@ -1012,10 +1043,19 @@ export default function AdminDashboard() {
             address: data.address || prev.address,
             phone: data.phone || prev.phone,
             email: data.email || prev.email,
-            instagram: data.instagram || prev.instagram,
+            instagram: (() => {
+              const newInstagram = data.instagram !== undefined ? data.instagram : prev.instagram;
+              console.log('📱 Atualizando Instagram:', {
+                dataInstagram: data.instagram,
+                prevInstagram: prev.instagram,
+                newInstagram: newInstagram,
+                dataInstagramType: typeof data.instagram
+              });
+              return newInstagram;
+            })(),
             // Atualizar URLs do servidor
-            logoUrl: data.logoUrl || prev.logoUrl,
-            bannerUrl: data.bannerUrl || prev.bannerUrl,
+            logoUrl: data.logoUrl !== undefined ? data.logoUrl : prev.logoUrl,
+            bannerUrl: data.bannerUrl !== undefined ? data.bannerUrl : prev.bannerUrl,
             openingHours: workingHours ? Object.keys(workingHours).reduce((acc: any, day) => {
               const dayData = workingHours[day];
               return {
@@ -1032,17 +1072,14 @@ export default function AdminDashboard() {
             logoUrl: newConfig.logoUrl,
             bannerUrl: newConfig.bannerUrl,
             prevLogoUrl: prev.logoUrl,
-            dataLogoUrl: data.logoUrl
+            dataLogoUrl: data.logoUrl,
+            instagram: newConfig.instagram
           });
 
-          // Limpar inputs de arquivo (não podemos definir nomes programaticamente)
-          if (logoInputRef.current) {
-            logoInputRef.current.value = '';
-          }
+          // Atualizar ref do Instagram
+          instagramRef.current = newConfig.instagram;
 
-          if (bannerInputRef.current) {
-            bannerInputRef.current.value = '';
-          }
+          // Não limpar inputs de arquivo aqui - manter seleção do usuário
 
           return newConfig;
         });
@@ -1061,7 +1098,7 @@ export default function AdminDashboard() {
     }
   };
 
-  const saveConfigurations = async (isAutoSave = false, typeToRemove?: string) => {
+  const saveConfigurations = async (isAutoSave = false, typeToRemove?: string, imageUrl?: string, imageType?: 'logo' | 'banner', instagramValue?: string) => {
     if (!userInfo) return;
 
     console.log('💾 Salvando configurações...', { isAutoSave });
@@ -1096,6 +1133,17 @@ export default function AdminDashboard() {
       // Fazer upload das imagens se houver arquivos selecionados
       let logoUrl = configurations.logoUrl;
       let bannerUrl = configurations.bannerUrl;
+
+      // Se uma URL de imagem foi passada como parâmetro, usar ela
+      if (imageUrl && imageType) {
+        if (imageType === 'logo') {
+          logoUrl = imageUrl;
+          console.log('✅ Usando logoUrl passada como parâmetro:', logoUrl);
+        } else if (imageType === 'banner') {
+          bannerUrl = imageUrl;
+          console.log('✅ Usando bannerUrl passada como parâmetro:', bannerUrl);
+        }
+      }
 
       console.log('🖼️ Salvando configurações com imagens:', {
         logoFile: !!configurations.logoFile,
@@ -1157,11 +1205,18 @@ export default function AdminDashboard() {
         email: configurations.email,
         workingHours: normalizedHours
       };
-      // instagram: enviar só se houver valor normalizado
-      const normalizedInsta = normalizeInstagramUrl(configurations.instagram);
-      if (normalizedInsta) {
-        payload.instagram = normalizedInsta;
-      }
+      // instagram: sempre enviar (pode ser string vazia para limpar)
+      const instagramToUse = instagramValue !== undefined ? instagramValue : configurations.instagram;
+      const normalizedInsta = normalizeInstagramUrl(instagramToUse);
+      payload.instagram = normalizedInsta || '';
+      console.log('📱 Instagram no payload:', {
+        instagramValue,
+        configurationsInstagram: configurations.instagram,
+        instagramToUse,
+        original: instagramToUse,
+        normalized: normalizedInsta,
+        final: payload.instagram
+      });
       // logo/banner: enviar apenas quando existir valor ou quando explicitamente removido
       if (typeToRemove === 'logo') {
         payload.logoUrl = '';
@@ -1269,13 +1324,7 @@ export default function AdminDashboard() {
         bannerFile: null
       }));
 
-      // Limpar inputs de arquivo após salvar
-      if (logoInputRef.current) {
-        logoInputRef.current.value = '';
-      }
-      if (bannerInputRef.current) {
-        bannerInputRef.current.value = '';
-      }
+      // Não limpar inputs de arquivo após salvar - manter seleção do usuário
 
       // NÃO limpar imagesToRemove aqui - deixar para ser limpo apenas quando realmente salvar
       // setImagesToRemove(new Set());
@@ -2025,7 +2074,10 @@ export default function AdminDashboard() {
                               ref={logoInputRef}
                               type="file"
                               accept="image/*"
-                              onChange={(e) => handleFileChange('logoFile', e.target.files?.[0] || null)}
+                              onChange={(e) => {
+                                console.log('📁 Input onChange chamado:', { files: e.target.files, fileName: e.target.files?.[0]?.name });
+                                handleFileChange('logoFile', e.target.files?.[0] || null);
+                              }}
                               className="flex-1 text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-[#4fc9ff] file:text-white hover:file:bg-blue-600"
                             />
                             {configurations.logoUrl && (
