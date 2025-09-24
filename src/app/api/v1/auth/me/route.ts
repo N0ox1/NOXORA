@@ -6,7 +6,15 @@ const prisma = new PrismaClient();
 
 export async function GET(request: NextRequest) {
     try {
-        const token = request.cookies.get('auth-token')?.value;
+        // Tentar obter token do cookie primeiro, depois do header Authorization
+        let token = request.cookies.get('auth-token')?.value;
+
+        if (!token) {
+            const authHeader = request.headers.get('authorization');
+            if (authHeader && authHeader.startsWith('Bearer ')) {
+                token = authHeader.substring(7);
+            }
+        }
 
         if (!token) {
             return NextResponse.json(
@@ -25,20 +33,37 @@ export async function GET(request: NextRequest) {
         }
 
         const decoded = jwt.verify(token, jwtSecret) as any;
+        const userId = decoded?.sub || decoded?.userId || null;
+        const email = decoded?.email || null;
 
-        // Buscar dados atualizados do usuário
-        const user = await prisma.employee.findUnique({
-            where: { id: decoded.userId },
-            select: {
-                id: true,
-                name: true,
-                email: true,
-                role: true,
-                tenantId: true,
-                barbershopId: true,
-                active: true,
-            },
-        });
+        let user = null as any;
+        if (userId) {
+            user = await prisma.employee.findUnique({
+                where: { id: userId },
+                select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    role: true,
+                    tenantId: true,
+                    barbershopId: true,
+                    active: true,
+                },
+            });
+        } else if (email) {
+            user = await prisma.employee.findUnique({
+                where: { email },
+                select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    role: true,
+                    tenantId: true,
+                    barbershopId: true,
+                    active: true,
+                },
+            });
+        }
 
         if (!user || !user.active) {
             return NextResponse.json(

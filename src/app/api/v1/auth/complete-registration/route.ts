@@ -107,12 +107,11 @@ export async function POST(request: NextRequest) {
             { status: 200 }
         );
 
-        // Definir cookie HTTP-only para segurança
+        // Definir cookie HTTP-only como cookie de sessão (expira ao fechar o navegador)
         response.cookies.set('auth-token', token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'strict',
-            maxAge: 7 * 24 * 60 * 60, // 7 dias
             path: '/',
         });
 

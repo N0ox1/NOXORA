@@ -22,10 +22,24 @@ interface Employee {
   active: boolean;
 }
 
+interface BarbershopInfo {
+  id: string;
+  name: string;
+  description?: string;
+  slug: string;
+  tenantId: string;
+}
+
 interface AppointmentSlot {
   time: string;
   available: boolean;
   employee_id?: string;
+}
+
+interface AvailabilityGroup {
+  employeeId: string | null;
+  employeeName: string;
+  slots: AppointmentSlot[];
 }
 
 async function noxoraFetchShop(slug: string) {
@@ -73,14 +87,18 @@ export default function BarbershopPage() {
     setMounted(true);
   }, []);
 
-  const [barbershop, setBarbershop] = useState<any>(null);
+  const [barbershop, setBarbershop] = useState<BarbershopInfo | null>(null);
   const [services, setServices] = useState<Service[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [employeePreference, setEmployeePreference] = useState<'specific' | 'any'>('any');
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [selectedTime, setSelectedTime] = useState<string>('');
-  const [availableSlots, setAvailableSlots] = useState<AppointmentSlot[]>([]);
+  const [availableSlots, setAvailableSlots] = useState<AvailabilityGroup[]>([]);
+  const [availabilityError, setAvailabilityError] = useState<string | null>(null);
+  const [lastRandomSeed, setLastRandomSeed] = useState<number>(Date.now());
+  const [loadingSlots, setLoadingSlots] = useState(false);
   const [clientInfo, setClientInfo] = useState({
     name: '',
     phone: '',
@@ -104,13 +122,14 @@ export default function BarbershopPage() {
             id: data.id,
             name: data.name,
             description: data.description,
-            slug: data.slug
+            slug: data.slug,
+            tenantId: data.tenantId
           });
           setServices(data.services || []);
-          setEmployees(data.employees || []);
+          const barbers = (data.employees || []).filter((emp: Employee) => emp.active && emp.role === 'BARBER');
+          setEmployees(barbers);
         } else {
-          // Sem fallback para evitar dados mockados incorretos
-          setBarbershop({ id: 'unknown', name: slug, description: '', slug });
+          setBarbershop(null);
           setServices([]);
           setEmployees([]);
         }
@@ -123,35 +142,144 @@ export default function BarbershopPage() {
 
   // Gerar slots de horário disponíveis
   useEffect(() => {
-    if (selectedDate && selectedService && selectedEmployee) {
-      const slots: AppointmentSlot[] = [];
-      const startHour = 9;
-      const endHour = 19;
-
-      for (let hour = startHour; hour < endHour; hour++) {
-        for (let minute = 0; minute < 60; minute += 30) {
-          const time = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-          slots.push({
-            time,
-            available: Math.random() > 0.3, // Mock: 70% disponível
-            employee_id: selectedEmployee.id
-          });
-        }
-      }
-
-      setAvailableSlots(slots);
+    if (!selectedDate || !selectedService || !barbershop) {
+      setAvailableSlots([]);
+      setAvailabilityError(null);
+      return;
     }
-  }, [selectedDate, selectedService, selectedEmployee]);
+
+    let alive = true;
+    (async () => {
+      try {
+        setLoadingSlots(true);
+
+        const employeeIds = employeePreference === 'any'
+          ? employees.map(emp => emp.id)
+          : selectedEmployee
+            ? [selectedEmployee.id]
+            : [];
+
+        if (employeeIds.length === 0 && employeePreference === 'any') {
+          const params = new URLSearchParams({
+            date: selectedDate,
+            barbershopId: barbershop.id,
+            serviceId: selectedService.id,
+          });
+          const res = await fetch(`/api/v1/public/availability?${params.toString()}`, {
+            cache: 'no-store',
+            headers: {
+              'x-tenant-id': barbershop.tenantId
+            }
+          });
+
+          if (!alive) return;
+
+          if (!res.ok) {
+            console.error('Erro ao buscar disponibilidade (qualquer barbeiro):', res.status, res.statusText);
+            setAvailableSlots([]);
+            setAvailabilityError('Não foi possível carregar os horários disponíveis. Tente novamente em instantes.');
+            return;
+          }
+
+          const data = await res.json();
+          const grouped = new Map<string, AppointmentSlot[]>();
+
+          (data.availableSlots || []).forEach((slot: any) => {
+            const key = slot.time;
+            const list = grouped.get(key) || [];
+            list.push({
+              time: slot.time,
+              available: slot.available,
+              employee_id: slot.employeeId || null
+            });
+            grouped.set(key, list);
+          });
+
+          const combined: AvailabilityGroup[] = Array.from(grouped.entries()).map(([time, slots]) => {
+            return {
+              employeeId: null,
+              employeeName: slots.length > 1 ? 'Vários barbeiros' : 'Barbeiro disponível',
+              slots: slots.map(slot => ({ ...slot, time }))
+            };
+          }).sort((a, b) => a.slots[0].time.localeCompare(b.slots[0].time));
+
+          groups.push(...combined);
+        } else {
+          for (const id of employeeIds) {
+            const params = new URLSearchParams({
+              date: selectedDate,
+              barbershopId: barbershop.id,
+              employeeId: id,
+              serviceId: selectedService.id,
+            });
+            const res = await fetch(`/api/v1/public/availability?${params.toString()}`, {
+              cache: 'no-store',
+              headers: {
+                'x-tenant-id': barbershop.tenantId
+              }
+            });
+
+            if (!alive) return;
+
+            if (!res.ok) {
+              console.error('Erro ao buscar disponibilidade:', id, res.status, res.statusText);
+              setAvailableSlots([]);
+              setAvailabilityError('Não foi possível carregar os horários disponíveis. Tente novamente em instantes.');
+              return;
+            }
+
+            const data = await res.json();
+            const slots = (data.availableSlots || []).map((slot: any) => ({
+              time: slot.time,
+              available: slot.available,
+              employee_id: id
+            }));
+            const employeeName = employees.find(emp => emp.id === id)?.name || 'Barbeiro disponível';
+
+            groups.push({
+              employeeId: id,
+              employeeName,
+              slots
+            });
+          }
+        }
+
+        setAvailableSlots(groups);
+        setAvailabilityError(null);
+        setLastRandomSeed(Date.now());
+      } catch (error) {
+        if (!alive) return;
+        console.error('Erro inesperado ao buscar disponibilidade:', error);
+        setAvailableSlots([]);
+        setAvailabilityError('Não foi possível carregar os horários disponíveis. Verifique sua conexão e tente novamente.');
+      } finally {
+        if (alive) setLoadingSlots(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [selectedDate, selectedService, selectedEmployee, barbershop, employeePreference, employees]);
 
   const handleServiceSelect = (service: Service) => {
     setSelectedService(service);
     setSelectedEmployee(null);
+    setEmployeePreference('any');
     setSelectedDate('');
     setSelectedTime('');
   };
 
   const handleEmployeeSelect = (employee: Employee) => {
+    setEmployeePreference('specific');
     setSelectedEmployee(employee);
+    setSelectedDate('');
+    setSelectedTime('');
+  };
+
+  const handleAnyEmployeeSelect = () => {
+    setEmployeePreference('any');
+    setSelectedEmployee(null);
     setSelectedDate('');
     setSelectedTime('');
   };
@@ -293,9 +421,9 @@ export default function BarbershopPage() {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="text-center">
             <h1 className="text-4xl font-bold mb-2 text-white">
-              {barbershop.name}
+              {barbershop?.name}
             </h1>
-            <p className="text-gray-300 text-lg mb-8">{barbershop.description}</p>
+            <p className="text-gray-300 text-lg mb-8">{barbershop?.description}</p>
 
             {/* Progress Bar */}
             <div className="flex items-center justify-center space-x-4 mb-8">
@@ -378,16 +506,30 @@ export default function BarbershopPage() {
         )}
 
         {/* Etapa 2: Seleção de Funcionário */}
-        {selectedService && !selectedEmployee && (
+        {selectedService && !selectedEmployee && employeePreference === 'any' && (
           <div className="bg-gray-800 rounded-lg border border-gray-700 p-8">
             <h2 className="text-2xl font-semibold text-white mb-2">Escolha o Barbeiro</h2>
-            <p className="text-gray-400 mb-6">Selecione o profissional</p>
+            <p className="text-gray-400 mb-6">Selecione o profissional ou siga sem preferência</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div
+                onClick={handleAnyEmployeeSelect}
+                className={`p-6 border ${employeePreference === 'any' ? 'border-[#01ABFE]' : 'border-gray-600'} rounded-lg cursor-pointer transition-all hover:scale-105 bg-gray-700`}
+              >
+                <div className="flex items-center">
+                  <div className="w-16 h-16 bg-[#01ABFE]/20 rounded-full flex items-center justify-center mr-4">
+                    <UserIcon className="h-8 w-8 text-[#01ABFE]" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-white text-lg">Sem preferência</h3>
+                    <p className="text-gray-400 text-sm">Encontraremos o melhor horário disponível</p>
+                  </div>
+                </div>
+              </div>
               {employees.filter(emp => emp.active).map((employee, idx) => (
                 <div
-                  key={`${employee.id}-${idx}`}
+                  key={employee.id}
                   onClick={() => handleEmployeeSelect(employee)}
-                  className="p-6 border border-gray-600 rounded-lg cursor-pointer transition-all hover:scale-105 bg-gray-700 hover:border-[#01ABFE]"
+                  className={`p-6 border ${employeePreference === 'specific' && selectedEmployee?.id === employee.id ? 'border-[#01ABFE]' : 'border-gray-600'} rounded-lg cursor-pointer transition-all hover:scale-105 bg-gray-700`}
                 >
                   <div className="flex items-center">
                     <div className="w-16 h-16 bg-gray-600 rounded-full flex items-center justify-center mr-4">
@@ -395,7 +537,7 @@ export default function BarbershopPage() {
                     </div>
                     <div>
                       <h3 className="font-semibold text-white text-lg">{employee.name}</h3>
-                      <p className="text-gray-400">{employee.role}</p>
+                      <p className="text-gray-400">Barbeiro</p>
                     </div>
                   </div>
                 </div>
@@ -404,8 +546,7 @@ export default function BarbershopPage() {
           </div>
         )}
 
-        {/* Etapa 3: Seleção de Data e Hora */}
-        {selectedEmployee && !selectedTime && (
+        {selectedService && employeePreference === 'specific' && selectedEmployee && !selectedTime && (
           <div className="space-y-6">
             {/* Seleção de Data */}
             <div className="bg-gray-800 rounded-lg border border-gray-700 p-8">
@@ -436,32 +577,219 @@ export default function BarbershopPage() {
               </div>
             </div>
 
-            {/* Seleção de Horário */}
             {selectedDate && (
               <div className="bg-gray-800 rounded-lg border border-gray-700 p-8">
                 <h2 className="text-2xl font-semibold text-white mb-2">
                   Horários Disponíveis
                 </h2>
-                <p className="text-gray-400 mb-6">Selecione o horário para {new Date(selectedDate).toLocaleDateString('pt-BR')}</p>
+                <p className="text-gray-400 mb-6">
+                  {selectedDate
+                    ? `Selecione o horário para ${(() => {
+                      const parsed = new Date(selectedDate);
+                      return Number.isNaN(parsed.getTime())
+                        ? selectedDate
+                        : parsed.toLocaleDateString('pt-BR');
+                    })()}`
+                    : 'Selecione o horário'}
+                </p>
                 <div className="grid grid-cols-4 gap-3">
-                  {availableSlots.map((slot, index) => (
-                    <button
-                      key={index}
-                      onClick={() => slot.available && handleTimeSelect(slot.time)}
-                      disabled={!slot.available}
-                      className={`p-3 text-center rounded-lg border transition-all hover:scale-105 ${!slot.available
-                        ? 'border-gray-600 text-gray-500 cursor-not-allowed bg-gray-700'
-                        : selectedTime === slot.time
-                          ? 'border-[#01ABFE] bg-[#01ABFE] text-white'
-                          : 'border-gray-600 bg-gray-700 hover:border-gray-500 text-white'
-                        }`}
-                    >
-                      {slot.time}
-                    </button>
+                  {loadingSlots && (
+                    <div className="col-span-4 text-sm text-gray-300">Carregando horários...</div>
+                  )}
+                  {availabilityError && !loadingSlots && (
+                    <div className="col-span-4 text-sm text-red-400">{availabilityError}</div>
+                  )}
+                  {!availabilityError && !loadingSlots && availableSlots.length === 0 && (
+                    <div className="col-span-4 text-sm text-gray-300">Nenhum horário disponível para este dia.</div>
+                  )}
+                  {availableSlots.map(group => (
+                    <div key={group.employeeId || 'any'} className="bg-gray-700 rounded-lg p-4 border border-gray-600">
+                      <h3 className="text-white font-medium text-sm mb-3">
+                        {group.employeeId ? `Com ${group.employeeName}` : 'Melhor horário disponível'}
+                      </h3>
+                      <div className="grid grid-cols-2 gap-2">
+                        {group.slots.length === 0 && (
+                          <span className="col-span-2 text-xs text-gray-400">Sem horários disponíveis.</span>
+                        )}
+                        {group.slots.map((slot, index) => (
+                          <button
+                            key={`${group.employeeId || 'any'}-${index}`}
+                            onClick={() => {
+                              setSelectedTime(slot.time);
+                              if (group.employeeId) {
+                                setSelectedEmployee(employees.find(emp => emp.id === group.employeeId) || null);
+                                setEmployeePreference('specific');
+                              } else {
+                                const options = slot.employee_id
+                                  ? [slot.employee_id]
+                                  : employees.map(emp => emp.id);
+                                if (options.length > 0) {
+                                  const randomIndex = Math.floor((lastRandomSeed + index) % options.length);
+                                  const randomId = options[randomIndex];
+                                  setSelectedEmployee(employees.find(emp => emp.id === randomId) || null);
+                                }
+                                setEmployeePreference('specific');
+                              }
+                            }}
+                            className={`p-3 text-center rounded-lg border transition-all hover:scale-105 ${selectedTime === slot.time
+                              ? 'border-[#01ABFE] bg-[#01ABFE] text-white'
+                              : 'border-gray-600 bg-gray-700 hover:border-gray-500 text-white'}
+                            `}
+                          >
+                            {slot.time}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   ))}
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {selectedService && employeePreference === 'any' && !selectedTime && (
+          <div className="space-y-6">
+            <div className="bg-gray-800 rounded-lg border border-gray-700 p-8">
+              <h2 className="text-2xl font-semibold text-white mb-2">Escolha a Data</h2>
+              <p className="text-gray-400 mb-6">Selecione o dia desejado</p>
+              <div className="grid grid-cols-7 gap-3">
+                {Array.from({ length: 14 }, (_, i) => {
+                  const date = new Date();
+                  date.setDate(date.getDate() + i);
+                  const dateStr = date.toISOString().split('T')[0];
+                  const dayName = date.toLocaleDateString('pt-BR', { weekday: 'short' });
+                  const dayNumber = date.getDate();
+
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => handleDateSelect(dateStr)}
+                      className={`p-4 text-center rounded-lg border transition-all hover:scale-105 ${selectedDate === dateStr
+                        ? 'border-[#01ABFE] bg-[#01ABFE] text-white'
+                        : 'border-gray-600 bg-gray-700 hover:border-gray-500 text-white'
+                        }`}
+                    >
+                      <div className="text-xs font-medium">{dayName}</div>
+                      <div className="text-lg font-semibold">{dayNumber}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {selectedDate && (
+              <div className="bg-gray-800 rounded-lg border border-gray-700 p-8">
+                <h2 className="text-2xl font-semibold text-white mb-2">
+                  Horários Disponíveis
+                </h2>
+                <p className="text-gray-400 mb-6">
+                  {selectedDate
+                    ? `Selecione o horário para ${(() => {
+                      const parsed = new Date(selectedDate);
+                      return Number.isNaN(parsed.getTime())
+                        ? selectedDate
+                        : parsed.toLocaleDateString('pt-BR');
+                    })()}`
+                    : 'Selecione o horário'}
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {loadingSlots && (
+                    <div className="col-span-full text-sm text-gray-300">Carregando horários...</div>
+                  )}
+                  {availabilityError && !loadingSlots && (
+                    <div className="col-span-full text-sm text-red-400">{availabilityError}</div>
+                  )}
+                  {!availabilityError && !loadingSlots && availableSlots.length === 0 && (
+                    <div className="col-span-full text-sm text-gray-300">Nenhum horário disponível para este dia.</div>
+                  )}
+                  {availableSlots.map(group => (
+                    <div key={group.employeeId || 'any'} className="bg-gray-700 rounded-lg p-4 border border-gray-600">
+                      <h3 className="text-white font-medium text-sm mb-3">
+                        {group.employeeId ? `Com ${group.employeeName}` : 'Melhor horário disponível'}
+                      </h3>
+                      <div className="grid grid-cols-2 gap-2">
+                        {group.slots.length === 0 && (
+                          <span className="col-span-2 text-xs text-gray-400">Sem horários disponíveis.</span>
+                        )}
+                        {group.slots.map((slot, index) => (
+                          <button
+                            key={`${group.employeeId || 'any'}-${index}`}
+                            onClick={() => {
+                              setSelectedTime(slot.time);
+                              if (group.employeeId) {
+                                setSelectedEmployee(employees.find(emp => emp.id === group.employeeId) || null);
+                                setEmployeePreference('specific');
+                              } else {
+                                const options = slot.employee_id
+                                  ? [slot.employee_id]
+                                  : employees.map(emp => emp.id);
+                                if (options.length > 0) {
+                                  const randomId = options[Math.floor(Math.random() * options.length)];
+                                  setSelectedEmployee(employees.find(emp => emp.id === randomId) || null);
+                                }
+                                setEmployeePreference('specific');
+                              }
+                            }}
+                            className={`p-3 text-center rounded-lg border transition-all hover:scale-105 ${selectedTime === slot.time
+                              ? 'border-[#01ABFE] bg-[#01ABFE] text-white'
+                              : 'border-gray-600 bg-gray-700 hover:border-gray-500 text-white'}
+                            `}
+                          >
+                            {slot.time}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {selectedService && employeePreference === 'specific' && selectedEmployee && selectedDate && !selectedTime && (
+          <div className="bg-gray-800 rounded-lg border border-gray-700 p-8">
+            <h2 className="text-2xl font-semibold text-white mb-2">
+              Horários Disponíveis
+            </h2>
+            <p className="text-gray-400 mb-6">
+              {selectedDate
+                ? `Selecione o horário para ${(() => {
+                  const parsed = new Date(selectedDate);
+                  return Number.isNaN(parsed.getTime())
+                    ? selectedDate
+                    : parsed.toLocaleDateString('pt-BR');
+                })()}`
+                : 'Selecione o horário'}
+            </p>
+            <div className="grid grid-cols-4 gap-3">
+              {loadingSlots && (
+                <div className="col-span-4 text-sm text-gray-300">Carregando horários...</div>
+              )}
+              {availabilityError && !loadingSlots && (
+                <div className="col-span-4 text-sm text-red-400">{availabilityError}</div>
+              )}
+              {!availabilityError && !loadingSlots && availableSlots.length === 0 && (
+                <div className="col-span-4 text-sm text-gray-300">Nenhum horário disponível para este dia.</div>
+              )}
+              {availableSlots
+                .find(group => group.employeeId === selectedEmployee.id)?.slots.map((slot, index) => (
+                  <button
+                    key={index}
+                    onClick={() => slot.available && handleTimeSelect(slot.time)}
+                    disabled={!slot.available}
+                    className={`p-3 text-center rounded-lg border transition-all hover:scale-105 ${!slot.available
+                      ? 'border-gray-600 text-gray-500 cursor-not-allowed bg-gray-700'
+                      : selectedTime === slot.time
+                        ? 'border-[#01ABFE] bg-[#01ABFE] text-white'
+                        : 'border-gray-600 bg-gray-700 hover:border-gray-500 text-white'}
+                    `}
+                  >
+                    {slot.time}
+                  </button>
+                ))}
+            </div>
           </div>
         )}
 
@@ -524,12 +852,23 @@ export default function BarbershopPage() {
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-gray-300">Profissional:</span>
-                    <span className="font-medium text-white">{selectedEmployee?.name}</span>
+                    <span className="font-medium text-white">
+                      {employeePreference === 'any' && !selectedEmployee
+                        ? 'Sem preferência'
+                        : selectedEmployee?.name}
+                    </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-gray-300">Data:</span>
                     <span className="font-medium text-white">
-                      {new Date(selectedDate).toLocaleDateString('pt-BR')}
+                      {selectedDate
+                        ? (() => {
+                          const parsed = new Date(selectedDate);
+                          return Number.isNaN(parsed.getTime())
+                            ? selectedDate
+                            : parsed.toLocaleDateString('pt-BR');
+                        })()
+                        : '--/--/----'}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">

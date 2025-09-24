@@ -35,7 +35,7 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ slug: 
                     }
                 },
                 employees: {
-                    where: { active: true },
+                    where: { active: true, role: 'BARBER' },
                     select: {
                         id: true,
                         name: true,

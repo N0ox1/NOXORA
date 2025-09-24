@@ -79,9 +79,9 @@ export default function PasswordPage() {
             console.log('🧹 Limpando dados temporários...');
             localStorage.removeItem('registrationData');
 
-            // Redirecionar para o painel admin
-            console.log('🔄 Redirecionando para /admin...');
-            router.push('/admin');
+            // Redirecionar para o dashboard
+            console.log('🔄 Redirecionando para /dashboard...');
+            router.push('/dashboard');
 
         } catch (error) {
             console.error('Erro ao finalizar cadastro:', error);

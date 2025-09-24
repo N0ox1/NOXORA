@@ -18,6 +18,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { ImageIcon, Globe, TrendingUp, DollarSign, Users, BarChart3 } from 'lucide-react';
 import { ConfirmationModal } from '@/components/ui/confirmation-modal';
+import SubscriptionModal from '@/components/subscriptions/subscription-modal';
 
 interface Service {
   id: string;
@@ -200,6 +201,12 @@ export default function AdminDashboard() {
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
 
+  // Estados para assinaturas
+  const [subscriptions, setSubscriptions] = useState<any[]>([]);
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+  const [editingSubscription, setEditingSubscription] = useState<any | null>(null);
+  const [isLoadingSubscriptions, setIsLoadingSubscriptions] = useState(false);
+
   // CSS para garantir uso de toda a largura
   useEffect(() => {
     const style = document.createElement('style');
@@ -333,6 +340,101 @@ export default function AdminDashboard() {
     }
   }, [userInfo]);
 
+  // Funções para gerenciar assinaturas
+  const loadSubscriptions = async () => {
+    if (!userInfo) return;
+
+    setIsLoadingSubscriptions(true);
+    try {
+      const response = await fetch('/api/v1/subscriptions', {
+        headers: {
+          'x-tenant-id': userInfo.tenantId,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setSubscriptions(data);
+      } else {
+        console.error('Erro ao carregar assinaturas');
+      }
+    } catch (error) {
+      console.error('Erro ao carregar assinaturas:', error);
+    } finally {
+      setIsLoadingSubscriptions(false);
+    }
+  };
+
+  const handleCreateSubscription = async (data: any) => {
+    if (!userInfo) return;
+
+    try {
+      const response = await fetch('/api/v1/subscriptions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-id': userInfo.tenantId,
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (response.ok) {
+        await loadSubscriptions();
+        toast.success('Assinatura criada com sucesso!');
+      } else {
+        const error = await response.json();
+        toast.error(error.message || 'Erro ao criar assinatura');
+      }
+    } catch (error) {
+      console.error('Erro ao criar assinatura:', error);
+      toast.error('Erro ao criar assinatura');
+    }
+  };
+
+  const handleUpdateSubscription = async (data: any) => {
+    if (!userInfo || !editingSubscription) return;
+
+    try {
+      const response = await fetch(`/api/v1/subscriptions/${editingSubscription.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-id': userInfo.tenantId,
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (response.ok) {
+        await loadSubscriptions();
+        toast.success('Assinatura atualizada com sucesso!');
+      } else {
+        const error = await response.json();
+        toast.error(error.message || 'Erro ao atualizar assinatura');
+      }
+    } catch (error) {
+      console.error('Erro ao atualizar assinatura:', error);
+      toast.error('Erro ao atualizar assinatura');
+    }
+  };
+
+  const handleSaveSubscription = async (data: any) => {
+    if (editingSubscription) {
+      await handleUpdateSubscription(data);
+    } else {
+      await handleCreateSubscription(data);
+    }
+  };
+
+  const openCreateSubscription = () => {
+    setEditingSubscription(null);
+    setShowSubscriptionModal(true);
+  };
+
+  const openEditSubscription = (subscription: any) => {
+    setEditingSubscription(subscription);
+    setShowSubscriptionModal(true);
+  };
+
   // Função para atualizar dados manualmente
   const refreshData = async () => {
     if (!userInfo) return;
@@ -344,7 +446,8 @@ export default function AdminDashboard() {
         loadEmployees(),
         loadAppointments(),
         loadClients(),
-        loadConfigurations()
+        loadConfigurations(),
+        loadSubscriptions()
       ]);
       setLastUpdate(new Date());
     } catch (error) {
@@ -380,8 +483,18 @@ export default function AdminDashboard() {
   const loadUserInfo = async () => {
     try {
       console.log('🔍 Carregando informações do usuário...');
+
+      // Tentar obter token do localStorage primeiro
+      const token = localStorage.getItem('access_token');
+
+      const headers: HeadersInit = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const response = await fetch('/api/v1/auth/me', {
-        credentials: 'include'
+        credentials: 'include',
+        headers
       });
 
       if (response.ok) {
@@ -392,10 +505,18 @@ export default function AdminDashboard() {
           barbershopId: data.user.barbershopId
         });
       } else {
-        console.error('Erro ao carregar informações do usuário');
+        console.error('Erro ao carregar informações do usuário:', response.status, response.statusText);
+        if (response.status === 401) {
+          // Sessão inválida/expirada: exigir login novamente
+          window.location.href = '/login';
+          return;
+        }
+        throw new Error('Falha ao carregar usuário');
       }
     } catch (error) {
       console.error('Erro ao carregar informações do usuário:', error);
+      // Redirecionar para login se não for possível obter usuário
+      window.location.href = '/login';
     }
   };
 
@@ -840,11 +961,11 @@ export default function AdminDashboard() {
     formData.append('type', type);
 
     try {
+      const uploadHeaders: any = { 'x-tenant-id': userInfo.tenantId || '' };
+      try { const at = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null; if (at) uploadHeaders['Authorization'] = `Bearer ${at}`; } catch { }
       const response = await fetch('/api/v1/barbershop/upload-image', {
         method: 'POST',
-        headers: {
-          'x-tenant-id': userInfo.tenantId || ''
-        },
+        headers: uploadHeaders,
         credentials: 'include',
         body: formData
       });
@@ -910,16 +1031,8 @@ export default function AdminDashboard() {
     toast.success('Imagem removida!');
   };
 
-  const generateSlug = (name: string) => {
-    return name
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '') // Remove acentos
-      .replace(/[^a-z0-9\s-]/g, '') // Remove caracteres especiais
-      .replace(/\s+/g, '-') // Substitui espaços por hífens
-      .replace(/-+/g, '-') // Remove hífens duplicados
-      .trim();
-  };
+  // Slug acompanha EXATAMENTE o nome digitado (sem normalizações)
+  const generateSlug = (name: string) => (name ?? '');
 
   // Função de auto-save com debounce
   const triggerAutoSave = () => {
@@ -955,13 +1068,9 @@ export default function AdminDashboard() {
   };
 
   const handleSlugChange = (name: string) => {
+    // Atualiza imediatamente o input sem salvar enquanto digita
     const newSlug = generateSlug(name);
-    setConfigurations(prev => ({
-      ...prev,
-      name,
-      slug: newSlug
-    }));
-    triggerAutoSave();
+    setConfigurations(prev => ({ ...prev, name, slug: newSlug }));
   };
 
   const normalizeInstagramUrl = (value: string): string => {
@@ -980,8 +1089,10 @@ export default function AdminDashboard() {
 
     console.log('🔄 Carregando configurações...', new Error().stack);
     try {
+      const headersLoad: any = { 'x-tenant-id': userInfo?.tenantId || '' };
+      try { const at = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null; if (at) headersLoad['Authorization'] = `Bearer ${at}`; } catch { }
       const response = await fetch('/api/v1/barbershop/settings', {
-        headers: { 'x-tenant-id': userInfo?.tenantId || '' },
+        headers: headersLoad,
         credentials: 'include'
       });
 
@@ -1035,35 +1146,27 @@ export default function AdminDashboard() {
       if (!hasLocalChanges) {
         console.log('✅ Atualizando configurações do servidor...');
         setConfigurations(prev => {
+          const safeString = (v: any, fallback: string) => (typeof v === 'string' ? v : fallback);
           const newConfig = {
             ...prev,
-            name: data.name || prev.name,
-            slug: data.slug || prev.slug,
-            description: data.description || prev.description,
-            address: data.address || prev.address,
-            phone: data.phone || prev.phone,
-            email: data.email || prev.email,
-            instagram: (() => {
-              const newInstagram = data.instagram !== undefined ? data.instagram : prev.instagram;
-              console.log('📱 Atualizando Instagram:', {
-                dataInstagram: data.instagram,
-                prevInstagram: prev.instagram,
-                newInstagram: newInstagram,
-                dataInstagramType: typeof data.instagram
-              });
-              return newInstagram;
-            })(),
-            // Atualizar URLs do servidor
-            logoUrl: data.logoUrl !== undefined ? data.logoUrl : prev.logoUrl,
-            bannerUrl: data.bannerUrl !== undefined ? data.bannerUrl : prev.bannerUrl,
+            name: safeString(data.name, prev.name || ''),
+            slug: safeString(data.slug, prev.slug || ''),
+            description: safeString(data.description, prev.description || ''),
+            address: safeString(data.address, prev.address || ''),
+            phone: safeString(data.phone, prev.phone || ''),
+            email: safeString(data.email, prev.email || ''),
+            instagram: safeString(data.instagram, prev.instagram || ''),
+            // Atualizar URLs do servidor sem permitir null
+            logoUrl: safeString(data.logoUrl, prev.logoUrl || ''),
+            bannerUrl: safeString(data.bannerUrl, prev.bannerUrl || ''),
             openingHours: workingHours ? Object.keys(workingHours).reduce((acc: any, day) => {
-              const dayData = workingHours[day];
+              const dayData = workingHours[day] || {};
               return {
                 ...acc,
                 [day]: {
                   ...dayData,
-                  open: formatTimeString(dayData.open),
-                  close: formatTimeString(dayData.close)
+                  open: formatTimeString((dayData as any).open || '09:00'),
+                  close: formatTimeString((dayData as any).close || '18:00')
                 }
               };
             }, {}) : prev.openingHours
@@ -1078,8 +1181,6 @@ export default function AdminDashboard() {
 
           // Atualizar ref do Instagram
           instagramRef.current = newConfig.instagram;
-
-          // Não limpar inputs de arquivo aqui - manter seleção do usuário
 
           return newConfig;
         });
@@ -1098,7 +1199,15 @@ export default function AdminDashboard() {
     }
   };
 
-  const saveConfigurations = async (isAutoSave = false, typeToRemove?: string, imageUrl?: string, imageType?: 'logo' | 'banner', instagramValue?: string) => {
+  const saveConfigurations = async (
+    isAutoSave = false,
+    typeToRemove?: string,
+    imageUrl?: string,
+    imageType?: 'logo' | 'banner',
+    instagramValue?: string,
+    nameOverride?: string,
+    slugOverride?: string
+  ) => {
     if (!userInfo) return;
 
     console.log('💾 Salvando configurações...', { isAutoSave });
@@ -1197,8 +1306,8 @@ export default function AdminDashboard() {
       }
 
       const payload: any = {
-        name: configurations.name,
-        slug: configurations.slug,
+        name: nameOverride ?? configurations.name,
+        slug: slugOverride ?? configurations.slug,
         description: configurations.description,
         address: configurations.address,
         phone: configurations.phone,
@@ -1229,12 +1338,14 @@ export default function AdminDashboard() {
         payload.bannerUrl = bannerUrl;
       }
 
+      const headersPut: any = {
+        'Content-Type': 'application/json',
+        'x-tenant-id': userInfo?.tenantId || ''
+      };
+      try { const at = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null; if (at) headersPut['Authorization'] = `Bearer ${at}`; } catch { }
       const response = await fetch('/api/v1/barbershop/settings', {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-tenant-id': userInfo?.tenantId || ''
-        },
+        headers: headersPut,
         credentials: 'include',
         body: JSON.stringify(payload)
       });
@@ -1365,7 +1476,7 @@ export default function AdminDashboard() {
             <h1 className="text-xl font-bold text-white">
               {configurations.name}
             </h1>
-            <p className="text-gray-300 text-sm">Dashboard Admin</p>
+            <p className="text-gray-300 text-sm">{configurations.name || 'Dashboard'}</p>
           </div>
         </div>
 
@@ -1485,8 +1596,8 @@ export default function AdminDashboard() {
                   {activeTab === 'agenda' && 'Agenda'}
                   {activeTab === 'clients' && 'Clientes'}
                   {activeTab === 'subscriptions' && 'Assinaturas'}
-                  {activeTab === 'plan' && 'Meu Plano'}
                   {activeTab === 'configurations' && 'Configurações'}
+                  {activeTab === 'plan' && 'Meu Plano'}
                 </h2>
                 <p className="text-slate-400 mt-1">
                   {activeTab === 'services' && 'Gerencie os serviços oferecidos pela sua barbearia'}
@@ -1494,9 +1605,23 @@ export default function AdminDashboard() {
                   {activeTab === 'agenda' && 'Visualize e gerencie os agendamentos'}
                   {activeTab === 'clients' && 'Controle sua base de clientes'}
                   {activeTab === 'subscriptions' && 'Configure planos de assinatura para seus clientes'}
-                  {activeTab === 'plan' && 'Gerencie sua assinatura da plataforma Noxora'}
                   {activeTab === 'configurations' && 'Configure as opções da sua barbearia'}
+                  {activeTab === 'plan' && 'Gerencie sua assinatura da plataforma Noxora'}
                 </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={async () => {
+                    try {
+                      await fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'include' });
+                    } catch { }
+                    try { if (typeof window !== 'undefined') localStorage.removeItem('access_token'); } catch { }
+                    window.location.href = '/login';
+                  }}
+                  className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg border border-red-500/50 transition-colors"
+                >
+                  Sair
+                </button>
               </div>
             </div>
           </div>
@@ -1969,6 +2094,7 @@ export default function AdminDashboard() {
                           type="text"
                           value={configurations.name}
                           onChange={(e) => handleSlugChange(e.target.value)}
+                          onBlur={() => saveConfigurations(false, undefined, undefined, undefined, undefined, configurations.name, configurations.slug)}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                           placeholder="Digite o nome da barbearia"
                         />
@@ -1982,7 +2108,8 @@ export default function AdminDashboard() {
                           <input
                             type="text"
                             value={configurations.slug}
-                            onChange={(e) => handleConfigChange('slug', e.target.value)}
+                            onChange={(e) => { handleConfigChange('slug', generateSlug(e.target.value)); }}
+                            onBlur={() => saveConfigurations(false, undefined, undefined, undefined, undefined, configurations.name, configurations.slug)}
                             className="flex-1 px-3 py-2 border border-gray-300 rounded-r-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                             placeholder="slug-da-barbearia"
                           />
@@ -2572,326 +2699,371 @@ export default function AdminDashboard() {
           {/* Modal de Confirmação de Exclusão */}
           {/* Seção de Assinaturas */}
           {activeTab === 'subscriptions' && (
-            <div className="space-y-6">
+            <div className="space-y-8">
               <div className="flex justify-between items-center">
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-900">Gerenciar Assinaturas</h2>
-                  <p className="text-gray-600 mt-1">Configure planos de assinatura para seus clientes</p>
+                  <h2 className="text-3xl font-bold text-gray-900">Gerenciar Assinaturas</h2>
+                  <p className="text-gray-600 mt-2 text-lg">Configure planos de assinatura para seus clientes</p>
                 </div>
-                <button className="bg-gradient-to-r from-pink-500 to-pink-600 text-white px-6 py-3 rounded-xl font-medium hover:from-pink-600 hover:to-pink-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5">
+                <button
+                  onClick={openCreateSubscription}
+                  className="bg-[#01ABFE] text-white px-8 py-4 rounded-xl font-semibold hover:bg-[#0099E6] transition-all duration-200 shadow-lg hover:shadow-xl"
+                >
                   <PlusIcon className="h-5 w-5 inline mr-2" />
                   Nova Assinatura
                 </button>
               </div>
 
               {/* Cards de Assinaturas */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-8">
-                {/* Plano Básico */}
-                <div className="bg-white rounded-2xl shadow-lg border border-gray-200/50 p-6 hover:shadow-xl transition-all duration-200">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl flex items-center justify-center">
-                      <span className="text-white text-xl font-bold">B</span>
-                    </div>
-                    <span className="bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded-full">Ativo</span>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {isLoadingSubscriptions ? (
+                  <div className="col-span-full text-center py-12">
+                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-[#01ABFE]"></div>
+                    <p className="mt-4 text-gray-600">Carregando assinaturas...</p>
                   </div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">Plano Básico</h3>
-                  <p className="text-gray-600 text-sm mb-4">1 corte por mês + desconto em produtos</p>
-                  <div className="flex items-baseline mb-4">
-                    <span className="text-3xl font-bold text-gray-900">R$ 29</span>
-                    <span className="text-gray-600 ml-1">/mês</span>
-                  </div>
-                  <div className="space-y-2 mb-6">
-                    <div className="flex items-center text-sm text-gray-600">
-                      <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                      </svg>
-                      1 corte por mês
-                    </div>
-                    <div className="flex items-center text-sm text-gray-600">
-                      <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                      </svg>
-                      10% desconto em produtos
-                    </div>
-                    <div className="flex items-center text-sm text-gray-600">
-                      <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                      </svg>
-                      Agendamento prioritário
+                ) : subscriptions.length === 0 ? (
+                  /* Estado Vazio - Nenhum Plano Criado */
+                  <div className="col-span-full">
+                    <div className="bg-gradient-to-br from-[#01ABFE]/5 to-[#6FD6FF]/5 rounded-2xl border-2 border-dashed border-[#01ABFE]/30 p-12 text-center">
+                      <div className="w-20 h-20 bg-[#01ABFE]/20 rounded-xl flex items-center justify-center mx-auto mb-6">
+                        <CreditCardIcon className="h-10 w-10 text-[#01ABFE]" />
+                      </div>
+                      <h3 className="text-2xl font-semibold text-gray-900 mb-3">Nenhum Plano de Assinatura</h3>
+                      <p className="text-gray-600 mb-8 text-lg">Crie seu primeiro plano de assinatura para começar a oferecer serviços recorrentes aos seus clientes</p>
+                      <button
+                        onClick={openCreateSubscription}
+                        className="bg-[#01ABFE] text-white px-8 py-4 rounded-xl font-semibold hover:bg-[#0099E6] transition-all duration-200 shadow-lg hover:shadow-xl"
+                      >
+                        <PlusIcon className="h-5 w-5 inline mr-2" />
+                        Criar Primeiro Plano
+                      </button>
                     </div>
                   </div>
-                  <div className="flex space-x-2">
-                    <button className="flex-1 bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors">
-                      Editar
-                    </button>
-                    <button className="flex-1 bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-600 transition-colors">
-                      Ver Assinantes
-                    </button>
-                  </div>
-                </div>
+                ) : (
+                  /* Lista de Assinaturas */
+                  subscriptions.map((subscription) => (
+                    <div key={subscription.id} className="bg-white rounded-2xl shadow-xl border border-gray-200 p-8 hover:shadow-2xl transition-all duration-200 hover:border-[#01ABFE]/30">
+                      <div className="flex items-center justify-between mb-6">
+                        <div className="w-14 h-14 rounded-xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #6FD6FF, #01ABFE)' }}>
+                          <span className="text-white text-xl font-bold">{subscription.name.charAt(0)}</span>
+                        </div>
+                        <span className={`text-sm font-semibold px-3 py-1 rounded-full ${subscription.isActive
+                          ? 'bg-[#01ABFE]/10 text-[#01ABFE]'
+                          : 'bg-gray-100 text-gray-600'
+                          }`}>
+                          {subscription.isActive ? 'Ativo' : 'Inativo'}
+                        </span>
+                      </div>
+                      <h3 className="text-2xl font-bold text-gray-900 mb-3">{subscription.name}</h3>
+                      <p className="text-gray-600 mb-6">{subscription.description || 'Sem descrição'}</p>
+                      <div className="flex items-baseline mb-6">
+                        <span className="text-4xl font-bold text-[#01ABFE]">R$ {(subscription.priceCents / 100).toFixed(2)}</span>
+                        <span className="text-gray-600 ml-2 text-lg">/{subscription.durationDays === 30 ? 'mês' : subscription.durationDays === 90 ? 'trimestre' : subscription.durationDays === 365 ? 'ano' : `${subscription.durationDays} dias`}</span>
+                      </div>
 
-                {/* Plano Premium */}
-                <div className="bg-white rounded-2xl shadow-lg border border-gray-200/50 p-6 hover:shadow-xl transition-all duration-200">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-purple-600 rounded-xl flex items-center justify-center">
-                      <span className="text-white text-xl font-bold">P</span>
-                    </div>
-                    <span className="bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded-full">Ativo</span>
-                  </div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">Plano Premium</h3>
-                  <p className="text-gray-600 text-sm mb-4">3 cortes por mês + produtos inclusos</p>
-                  <div className="flex items-baseline mb-4">
-                    <span className="text-3xl font-bold text-gray-900">R$ 79</span>
-                    <span className="text-gray-600 ml-1">/mês</span>
-                  </div>
-                  <div className="space-y-2 mb-6">
-                    <div className="flex items-center text-sm text-gray-600">
-                      <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                      </svg>
-                      3 cortes por mês
-                    </div>
-                    <div className="flex items-center text-sm text-gray-600">
-                      <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                      </svg>
-                      Produtos inclusos
-                    </div>
-                    <div className="flex items-center text-sm text-gray-600">
-                      <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                      </svg>
-                      Agendamento flexível
-                    </div>
-                  </div>
-                  <div className="flex space-x-2">
-                    <button className="flex-1 bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors">
-                      Editar
-                    </button>
-                    <button className="flex-1 bg-purple-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-purple-600 transition-colors">
-                      Ver Assinantes
-                    </button>
-                  </div>
-                </div>
+                      {/* Serviços */}
+                      {subscription.services && subscription.services.length > 0 && (
+                        <div className="space-y-2 mb-6">
+                          <h4 className="text-sm font-semibold text-gray-700">Serviços Inclusos:</h4>
+                          {subscription.services.slice(0, 3).map((service: string, index: number) => (
+                            <div key={index} className="flex items-center text-gray-700">
+                              <svg className="w-4 h-4 text-[#01ABFE] mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                              </svg>
+                              <span className="text-sm">{service}</span>
+                            </div>
+                          ))}
+                          {subscription.services.length > 3 && (
+                            <p className="text-sm text-gray-500">+{subscription.services.length - 3} mais</p>
+                          )}
+                        </div>
+                      )}
 
-                {/* Adicionar Novo Plano */}
-                <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl border-2 border-dashed border-gray-300 p-6 hover:border-gray-400 transition-all duration-200 cursor-pointer">
-                  <div className="flex flex-col items-center justify-center h-full text-center">
-                    <div className="w-12 h-12 bg-gray-300 rounded-xl flex items-center justify-center mb-4">
-                      <PlusIcon className="h-6 w-6 text-gray-600" />
+                      {/* Benefícios */}
+                      {subscription.benefits && subscription.benefits.length > 0 && (
+                        <div className="space-y-2 mb-6">
+                          <h4 className="text-sm font-semibold text-gray-700">Benefícios:</h4>
+                          {subscription.benefits.slice(0, 2).map((benefit: string, index: number) => (
+                            <div key={index} className="flex items-center text-gray-700">
+                              <svg className="w-4 h-4 text-[#01ABFE] mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                              </svg>
+                              <span className="text-sm">{benefit}</span>
+                            </div>
+                          ))}
+                          {subscription.benefits.length > 2 && (
+                            <p className="text-sm text-gray-500">+{subscription.benefits.length - 2} mais</p>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="flex space-x-3">
+                        <button
+                          onClick={() => openEditSubscription(subscription)}
+                          className="flex-1 bg-gray-100 text-gray-700 px-4 py-3 rounded-lg font-semibold hover:bg-gray-200 transition-colors"
+                        >
+                          Editar
+                        </button>
+                        <button className="flex-1 bg-[#01ABFE] text-white px-4 py-3 rounded-lg font-semibold hover:bg-[#0099E6] transition-colors">
+                          Ver Assinantes ({subscription.clientSubscriptions?.length || 0})
+                        </button>
+                      </div>
                     </div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">Criar Novo Plano</h3>
-                    <p className="text-gray-600 text-sm">Adicione um novo plano de assinatura</p>
-                  </div>
-                </div>
+                  ))
+                )}
               </div>
 
-              {/* Estatísticas de Assinaturas */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-8">
-                <div className="bg-white rounded-xl shadow-lg p-6">
+              {/* Estatísticas de Assinaturas - Será exibido quando houver dados */}
+              {/* <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-200">
                   <div className="flex items-center">
-                    <div className="w-12 h-12 bg-gray-900 rounded-lg flex items-center justify-center">
-                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="w-14 h-14 bg-[#01ABFE] rounded-xl flex items-center justify-center">
+                      <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                       </svg>
                     </div>
-                    <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-600">Total de Assinantes</p>
-                      <p className="text-2xl font-bold text-gray-900">47</p>
+                    <div className="ml-6">
+                      <p className="text-sm font-medium text-gray-600 mb-1">Total de Assinantes</p>
+                      <p className="text-3xl font-bold text-gray-900">0</p>
                     </div>
                   </div>
                 </div>
 
-                <div className="bg-white rounded-xl shadow-lg p-6">
+                <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-200">
                   <div className="flex items-center">
-                    <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                      <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="w-14 h-14 bg-[#6FD6FF] rounded-xl flex items-center justify-center">
+                      <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
                       </svg>
                     </div>
-                    <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-600">Receita Mensal</p>
-                      <p className="text-2xl font-bold text-gray-900">R$ 3.247</p>
+                    <div className="ml-6">
+                      <p className="text-sm font-medium text-gray-600 mb-1">Receita Mensal</p>
+                      <p className="text-3xl font-bold text-gray-900">R$ 0</p>
                     </div>
                   </div>
                 </div>
 
-                <div className="bg-white rounded-xl shadow-lg p-6">
+                <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-200">
                   <div className="flex items-center">
-                    <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                      <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="w-14 h-14 bg-[#007FB8] rounded-xl flex items-center justify-center">
+                      <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                       </svg>
                     </div>
-                    <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-600">Crescimento</p>
-                      <p className="text-2xl font-bold text-gray-900">+12%</p>
+                    <div className="ml-6">
+                      <p className="text-sm font-medium text-gray-600 mb-1">Crescimento</p>
+                      <p className="text-3xl font-bold text-gray-900">0%</p>
                     </div>
                   </div>
                 </div>
 
-                <div className="bg-white rounded-xl shadow-lg p-6">
+                <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-200">
                   <div className="flex items-center">
-                    <div className="w-12 h-12 bg-gray-900 rounded-lg flex items-center justify-center">
-                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="w-14 h-14 rounded-xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #6FD6FF, #01ABFE)' }}>
+                      <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                       </svg>
                     </div>
-                    <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-600">Taxa de Retenção</p>
-                      <p className="text-2xl font-bold text-gray-900">89%</p>
+                    <div className="ml-6">
+                      <p className="text-sm font-medium text-gray-600 mb-1">Taxa de Retenção</p>
+                      <p className="text-3xl font-bold text-gray-900">0%</p>
                     </div>
                   </div>
                 </div>
-              </div>
+              </div> */}
             </div>
           )}
 
           {/* Seção de Meu Plano */}
           {activeTab === 'plan' && (
-            <div className="space-y-6">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900">Meu Plano Noxora</h2>
-                  <p className="text-gray-600 mt-1">Gerencie sua assinatura da plataforma</p>
-                </div>
-              </div>
+            <div className="space-y-8">
+              {/* Plano Atual - Card Principal */}
+              <div className="rounded-2xl shadow-xl p-8 text-white relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #6FD6FF, #01ABFE, #007FB8)' }}>
+                <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent"></div>
+                <div className="relative z-10">
+                  <div className="flex items-center justify-between mb-8">
+                    <div>
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="w-2 h-2 bg-white rounded-full"></div>
+                        <span className="text-sm font-medium text-white/90">Plano Ativo</span>
+                      </div>
+                      <h3 className="text-3xl font-bold mb-2">Plano Starter</h3>
+                      <p className="text-white/90 text-lg">Ideal para barbearias iniciantes</p>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-5xl font-bold mb-1">R$ 97</div>
+                      <div className="text-white/90 text-lg">/mês</div>
+                    </div>
+                  </div>
 
-              {/* Plano Atual */}
-              <div className="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-2xl shadow-2xl p-8 text-white">
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h3 className="text-2xl font-bold mb-2">Plano Starter</h3>
-                    <p className="text-[#01ABFE]">Ideal para barbearias iniciantes</p>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    <div className="bg-white/20 backdrop-blur-sm rounded-lg p-6 border border-white/30">
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="w-8 h-8 bg-white/30 rounded-lg flex items-center justify-center">
+                          <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </div>
+                        <span className="text-sm font-medium text-white/90">Funcionários</span>
+                      </div>
+                      <div className="text-2xl font-bold">Até 3</div>
+                    </div>
+                    <div className="bg-white/20 backdrop-blur-sm rounded-lg p-6 border border-white/30">
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="w-8 h-8 bg-white/30 rounded-lg flex items-center justify-center">
+                          <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                        <span className="text-sm font-medium text-white/90">Agendamentos</span>
+                      </div>
+                      <div className="text-2xl font-bold">Ilimitados</div>
+                    </div>
+                    <div className="bg-white/20 backdrop-blur-sm rounded-lg p-6 border border-white/30">
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="w-8 h-8 bg-white/30 rounded-lg flex items-center justify-center">
+                          <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-2 0c0 .993-.241 1.929-.668 2.754l-1.524-1.525a3.997 3.997 0 00.078-2.183l1.562-1.562C15.759 8.071 16 9.007 16 10zm-5.165 3.913l1.58 1.58A5.98 5.98 0 0110 16a5.976 5.976 0 01-2.516-.552l1.562-1.562a4.006 4.006 0 001.789.027zm-4.677-2.56a1 1 0 00-1.414-1.414l-.705.705a2 2 0 00-.547 1.458l.705.705a1 1 0 001.414-1.414l-.705-.705zM4 10a5.99 5.99 0 015.98-5.98l-.705.705a4.006 4.006 0 00-1.789.027l-1.562-1.562A5.976 5.976 0 004 10zm6.98-5.98l.705.705a4.006 4.006 0 011.789-.027l1.562 1.562A5.976 5.976 0 0016 10a5.99 5.99 0 00-5.98-5.98z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                        <span className="text-sm font-medium text-white/90">Suporte</span>
+                      </div>
+                      <div className="text-2xl font-bold">24/7</div>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-4xl font-bold">R$ 97</div>
-                    <div className="text-[#01ABFE]">/mês</div>
-                  </div>
-                </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                  <div className="bg-white/20 rounded-lg p-4">
-                    <div className="text-sm text-[#01ABFE] mb-1">Funcionários</div>
-                    <div className="text-2xl font-bold">Até 3</div>
+                  <div className="flex flex-col sm:flex-row gap-4">
+                    <button className="bg-white text-[#01ABFE] px-8 py-4 rounded-lg font-semibold hover:bg-white/90 transition-all duration-200 shadow-lg hover:shadow-xl">
+                      Alterar Plano
+                    </button>
+                    <button className="bg-white/20 backdrop-blur-sm text-white px-8 py-4 rounded-lg font-semibold hover:bg-white/30 transition-all duration-200 border border-white/30">
+                      Ver Detalhes Completos
+                    </button>
                   </div>
-                  <div className="bg-white/20 rounded-lg p-4">
-                    <div className="text-sm text-[#01ABFE] mb-1">Agendamentos</div>
-                    <div className="text-2xl font-bold">Ilimitados</div>
-                  </div>
-                  <div className="bg-white/20 rounded-lg p-4">
-                    <div className="text-sm text-[#01ABFE] mb-1">Suporte</div>
-                    <div className="text-2xl font-bold">24/7</div>
-                  </div>
-                </div>
-
-                <div className="flex space-x-4">
-                  <button className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-[#0099E6] transition-colors border border-[#0099E6]">
-                    Alterar Plano
-                  </button>
-                  <button className="bg-white/20 text-white px-6 py-3 rounded-lg font-medium hover:bg-white/30 transition-colors">
-                    Ver Detalhes
-                  </button>
                 </div>
               </div>
 
               {/* Comparação de Planos */}
-              <div className="bg-white rounded-2xl shadow-lg p-6">
-                <h3 className="text-xl font-bold text-gray-900 mb-6">Compare os Planos</h3>
+              <div className="bg-white rounded-3xl shadow-xl p-8">
+                <div className="text-center mb-8">
+                  <h3 className="text-2xl font-bold text-gray-900 mb-2">Compare os Planos</h3>
+                  <p className="text-gray-600">Escolha o plano ideal para o crescimento da sua barbearia</p>
+                </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                   {/* Plano Starter */}
-                  <div className="border-2 border-slate-600 rounded-xl p-6 relative">
+                  <div className="border-2 border-[#01ABFE] rounded-xl p-8 relative bg-gradient-to-b from-[#01ABFE]/5 to-white">
                     <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                      <span className="bg-blue-600 text-white text-xs font-medium px-3 py-1 rounded-full">Atual</span>
+                      <span className="bg-[#01ABFE] text-white text-sm font-semibold px-4 py-2 rounded-full shadow-lg">Seu Plano Atual</span>
                     </div>
-                    <div className="text-center mb-4">
-                      <h4 className="text-lg font-bold text-gray-900">Starter</h4>
-                      <div className="text-3xl font-bold text-gray-900 mt-2">R$ 97</div>
+                    <div className="text-center mb-6">
+                      <h4 className="text-xl font-bold text-gray-900 mb-2">Starter</h4>
+                      <div className="text-4xl font-bold text-[#01ABFE] mb-1">R$ 97</div>
                       <div className="text-gray-600">/mês</div>
                     </div>
-                    <ul className="space-y-3 text-sm">
-                      <li className="flex items-center">
-                        <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <ul className="space-y-4 mb-8">
+                      <li className="flex items-start gap-3">
+                        <svg className="w-5 h-5 text-[#01ABFE] mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                           <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                         </svg>
-                        Até 3 funcionários
+                        <span className="text-gray-700">Até 3 funcionários</span>
                       </li>
-                      <li className="flex items-center">
-                        <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                      <li className="flex items-start gap-3">
+                        <svg className="w-5 h-5 text-[#01ABFE] mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                           <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                         </svg>
-                        Agendamentos ilimitados
+                        <span className="text-gray-700">Agendamentos ilimitados</span>
                       </li>
-                      <li className="flex items-center">
-                        <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                      <li className="flex items-start gap-3">
+                        <svg className="w-5 h-5 text-[#01ABFE] mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                           <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                         </svg>
-                        Suporte por email
+                        <span className="text-gray-700">Suporte por email</span>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <svg className="w-5 h-5 text-[#01ABFE] mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                        <span className="text-gray-700">Relatórios básicos</span>
                       </li>
                     </ul>
+                    <button className="w-full bg-[#01ABFE] text-white py-3 rounded-lg font-semibold hover:bg-[#0099E6] transition-colors">
+                      Plano Atual
+                    </button>
                   </div>
 
                   {/* Plano Professional */}
-                  <div className="border-2 border-gray-200 rounded-xl p-6">
-                    <div className="text-center mb-4">
-                      <h4 className="text-lg font-bold text-gray-900">Professional</h4>
-                      <div className="text-3xl font-bold text-gray-900 mt-2">R$ 197</div>
+                  <div className="border-2 border-gray-200 rounded-xl p-8 hover:border-[#01ABFE] transition-all duration-200 hover:shadow-lg">
+                    <div className="text-center mb-6">
+                      <h4 className="text-xl font-bold text-gray-900 mb-2">Professional</h4>
+                      <div className="text-4xl font-bold text-[#01ABFE] mb-1">R$ 197</div>
                       <div className="text-gray-600">/mês</div>
                     </div>
-                    <ul className="space-y-3 text-sm">
-                      <li className="flex items-center">
-                        <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <ul className="space-y-4 mb-8">
+                      <li className="flex items-start gap-3">
+                        <svg className="w-5 h-5 text-[#01ABFE] mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                           <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                         </svg>
-                        Até 10 funcionários
+                        <span className="text-gray-700">Até 10 funcionários</span>
                       </li>
-                      <li className="flex items-center">
-                        <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                      <li className="flex items-start gap-3">
+                        <svg className="w-5 h-5 text-[#01ABFE] mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                           <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                         </svg>
-                        Relatórios avançados
+                        <span className="text-gray-700">Relatórios avançados</span>
                       </li>
-                      <li className="flex items-center">
-                        <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                      <li className="flex items-start gap-3">
+                        <svg className="w-5 h-5 text-[#01ABFE] mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                           <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                         </svg>
-                        Suporte prioritário
+                        <span className="text-gray-700">Suporte prioritário</span>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <svg className="w-5 h-5 text-[#01ABFE] mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                        <span className="text-gray-700">Integração com WhatsApp</span>
                       </li>
                     </ul>
-                    <button className="w-full mt-4 bg-gray-800 text-white py-2 rounded-lg font-medium hover:bg-gray-700 transition-colors border border-gray-700">
+                    <button className="w-full bg-[#01ABFE] text-white py-3 rounded-lg font-semibold hover:bg-[#0099E6] transition-colors">
                       Fazer Upgrade
                     </button>
                   </div>
 
                   {/* Plano Enterprise */}
-                  <div className="border-2 border-gray-200 rounded-xl p-6">
-                    <div className="text-center mb-4">
-                      <h4 className="text-lg font-bold text-gray-900">Enterprise</h4>
-                      <div className="text-3xl font-bold text-gray-900 mt-2">R$ 397</div>
+                  <div className="border-2 border-gray-200 rounded-xl p-8 hover:border-[#01ABFE] transition-all duration-200 hover:shadow-lg">
+                    <div className="text-center mb-6">
+                      <h4 className="text-xl font-bold text-gray-900 mb-2">Enterprise</h4>
+                      <div className="text-4xl font-bold text-[#01ABFE] mb-1">R$ 397</div>
                       <div className="text-gray-600">/mês</div>
                     </div>
-                    <ul className="space-y-3 text-sm">
-                      <li className="flex items-center">
-                        <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <ul className="space-y-4 mb-8">
+                      <li className="flex items-start gap-3">
+                        <svg className="w-5 h-5 text-[#01ABFE] mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                           <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                         </svg>
-                        Funcionários ilimitados
+                        <span className="text-gray-700">Funcionários ilimitados</span>
                       </li>
-                      <li className="flex items-center">
-                        <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                      <li className="flex items-start gap-3">
+                        <svg className="w-5 h-5 text-[#01ABFE] mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                           <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                         </svg>
-                        API personalizada
+                        <span className="text-gray-700">API personalizada</span>
                       </li>
-                      <li className="flex items-center">
-                        <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                      <li className="flex items-start gap-3">
+                        <svg className="w-5 h-5 text-[#01ABFE] mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                           <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                         </svg>
-                        Suporte dedicado
+                        <span className="text-gray-700">Suporte dedicado</span>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <svg className="w-5 h-5 text-[#01ABFE] mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                        <span className="text-gray-700">Treinamento personalizado</span>
                       </li>
                     </ul>
-                    <button className="w-full mt-4 bg-gray-200 text-gray-700 py-2 rounded-lg font-medium hover:bg-gray-300 transition-colors">
+                    <button className="w-full bg-[#007FB8] text-white py-3 rounded-lg font-semibold hover:bg-[#006699] transition-colors">
                       Contatar Vendas
                     </button>
                   </div>
@@ -2899,48 +3071,70 @@ export default function AdminDashboard() {
               </div>
 
               {/* Informações de Cobrança */}
-              <div className="bg-white rounded-2xl shadow-lg p-6">
-                <h3 className="text-xl font-bold text-gray-900 mb-6">Informações de Cobrança</h3>
+              <div className="bg-white rounded-3xl shadow-xl p-8">
+                <div className="text-center mb-8">
+                  <h3 className="text-2xl font-bold text-gray-900 mb-2">Informações de Cobrança</h3>
+                  <p className="text-gray-600">Gerencie seus pagamentos e faturas</p>
+                </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-8">
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-3">Próxima Cobrança</h4>
-                    <div className="bg-gray-50 rounded-lg p-4">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  <div className="bg-gradient-to-br from-[#01ABFE]/5 to-[#6FD6FF]/5 rounded-xl p-6 border border-[#01ABFE]/20">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-10 h-10 bg-[#01ABFE] rounded-lg flex items-center justify-center">
+                        <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <h4 className="text-lg font-semibold text-gray-900">Próxima Cobrança</h4>
+                    </div>
+                    <div className="space-y-3">
                       <div className="flex justify-between items-center">
                         <span className="text-gray-600">Data</span>
-                        <span className="font-medium">15 de Outubro, 2024</span>
+                        <span className="font-semibold text-gray-900">15 de Outubro, 2024</span>
                       </div>
-                      <div className="flex justify-between items-center mt-2">
+                      <div className="flex justify-between items-center">
                         <span className="text-gray-600">Valor</span>
-                        <span className="font-bold text-lg">R$ 97,00</span>
+                        <span className="font-bold text-xl text-[#01ABFE]">R$ 97,00</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-600">Status</span>
+                        <span className="bg-[#01ABFE]/10 text-[#01ABFE] px-3 py-1 rounded-full text-sm font-medium">Ativo</span>
                       </div>
                     </div>
                   </div>
 
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-3">Método de Pagamento</h4>
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <div className="flex items-center">
-                        <div className="w-8 h-8 bg-[#6FD6FF] rounded-lg flex items-center justify-center mr-3">
-                          <svg className="w-5 h-5 text-[#01ABFE]" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2zm0 2v12h16V6H4zm2 2h12v2H6V8zm0 4h12v2H6v-2z" />
-                          </svg>
-                        </div>
-                        <div>
-                          <div className="font-medium">Cartão terminado em 4242</div>
-                          <div className="text-sm text-gray-600">Visa •••• 4242</div>
-                        </div>
+                  <div className="bg-gradient-to-br from-gray-50 to-[#01ABFE]/5 rounded-xl p-6 border border-gray-200">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-10 h-10 bg-[#007FB8] rounded-lg flex items-center justify-center">
+                        <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2zm0 2v12h16V6H4zm2 2h12v2H6V8zm0 4h12v2H6v-2z" />
+                        </svg>
+                      </div>
+                      <h4 className="text-lg font-semibold text-gray-900">Método de Pagamento</h4>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-8 rounded-lg flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #6FD6FF, #01ABFE)' }}>
+                        <svg className="w-6 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2zm0 2v12h16V6H4zm2 2h12v2H6V8zm0 4h12v2H6v-2z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <div className="font-semibold text-gray-900">Cartão terminado em 4242</div>
+                        <div className="text-sm text-gray-600">Visa •••• 4242</div>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                <div className="mt-6 flex space-x-4">
-                  <button className="bg-gray-800 text-white px-6 py-2 rounded-lg font-medium hover:bg-gray-700 transition-colors border border-gray-700">
+                <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
+                  <button className="bg-[#01ABFE] text-white px-8 py-3 rounded-lg font-semibold hover:bg-[#0099E6] transition-colors shadow-lg hover:shadow-xl">
                     Alterar Método de Pagamento
                   </button>
-                  <button className="bg-gray-100 text-gray-700 px-6 py-2 rounded-lg font-medium hover:bg-gray-200 transition-colors">
+                  <button className="bg-gray-100 text-gray-700 px-8 py-3 rounded-lg font-semibold hover:bg-gray-200 transition-colors border border-gray-300">
                     Baixar Fatura
+                  </button>
+                  <button className="bg-gray-50 text-gray-600 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-colors border border-gray-200">
+                    Histórico de Pagamentos
                   </button>
                 </div>
               </div>
@@ -2957,6 +3151,14 @@ export default function AdminDashboard() {
             cancelText="Cancelar"
             type="danger"
             isLoading={isDeleting}
+          />
+
+          <SubscriptionModal
+            isOpen={showSubscriptionModal}
+            onClose={() => setShowSubscriptionModal(false)}
+            onSave={handleSaveSubscription}
+            subscription={editingSubscription}
+            mode={editingSubscription ? 'edit' : 'create'}
           />
         </div>
       </div>

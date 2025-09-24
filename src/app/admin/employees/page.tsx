@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTenant } from '@/components/tenant/use-tenant';
 import { toast } from 'react-hot-toast';
@@ -69,6 +69,10 @@ export default function BarbershopSettingsPage() {
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [bannerFile, setBannerFile] = useState<File | null>(null);
 
+  // Refs para garantir captura do último caractere no salvar imediato
+  const nameRef = useRef<HTMLInputElement | null>(null);
+  const slugRef = useRef<HTMLInputElement | null>(null);
+
   // Carregar configurações
   async function loadSettings() {
     setLoading(true);
@@ -125,8 +129,12 @@ export default function BarbershopSettingsPage() {
   async function saveSettings() {
     setSaving(true);
     try {
+      const latestName = nameRef.current?.value ?? settings.name;
+      const latestSlug = slugRef.current?.value ?? settings.slug;
       const normalized = {
         ...settings,
+        name: latestName,
+        slug: latestSlug,
         instagram: (() => {
           const v = settings.instagram || '';
           if (!v) return '';
@@ -290,6 +298,7 @@ export default function BarbershopSettingsPage() {
                   <Label htmlFor="name">Nome da Barbearia</Label>
                   <Input
                     id="name"
+                    ref={nameRef}
                     value={settings.name}
                     onChange={(e) => setSettings(prev => ({ ...prev, name: e.target.value }))}
                     placeholder="Digite o nome da barbearia"
@@ -301,6 +310,7 @@ export default function BarbershopSettingsPage() {
                     <span className="text-sm text-gray-500">noxora.com/b/</span>
                     <Input
                       id="slug"
+                      ref={slugRef}
                       value={settings.slug}
                       onChange={(e) => setSettings(prev => ({ ...prev, slug: e.target.value }))}
                       placeholder="barber-labs-centro"

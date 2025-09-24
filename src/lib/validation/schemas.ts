@@ -107,8 +107,9 @@ export const reportingQuery = z.object({
 // Availability schemas
 export const availabilityQuery = z.object({
     date: dateString,
-    employeeId: uuid.optional(),
-    serviceId: uuid.optional()
+    barbershopId: cuid,
+    employeeId: cuid.optional(),
+    serviceId: cuid.optional()
 });
 
 // Webhook schemas

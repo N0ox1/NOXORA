@@ -53,7 +53,7 @@ if (process.env.REDIS_HOST || process.env.REDIS_URL) {
 // TTL por rota (em segundos)
 export const TTL_MATRIX = {
     '/api/v1/barbershop/public/[slug]': 60,
-    '/api/v1/availability?day=YYYY-MM-DD': 60,
+    '/api/v1/public/availability?day=YYYY-MM-DD': 60,
     '/api/v1/services': 300,
     '/api/v1/employees': 300,
     '/api/v1/reporting/': 300,
@@ -67,8 +67,8 @@ export const CACHE_KEYS = {
         `svc:${tenantId}:${barbershopId}:v1`,
     employeesHot: (tenantId: string, barbershopId: string) =>
         `emp:${tenantId}:${barbershopId}:v1`,
-    publicShop: (tenantId: string, slug: string) =>
-        `bs:${tenantId}:${slug}:v1`,
+    publicShop: (tenantId: string, barbershopId: string) =>
+        `pubshop:${tenantId}:${barbershopId}:v1`,
     reportingDaily: (tenantId: string, from: string, to: string) =>
         `rpt:daily:${tenantId}:${from}:${to}`,
     occupancyEmp: (tenantId: string, empId: string, from: string, to: string) =>

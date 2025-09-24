@@ -1,6 +1,6 @@
-import { PrismaClient } from '@prisma/client';
-import { cacheService, CACHE_KEYS } from '../cache/redis';
-import { readWithRetry } from '../database/pool';
+import { prisma } from '@/lib/prisma';
+import { cacheService, CACHE_KEYS } from '@/lib/cache/redis';
+import { readWithRetry } from '@/lib/database/pool';
 
 // Configuração do algoritmo de disponibilidade
 const AVAILABILITY_CONFIG = {
@@ -35,11 +35,6 @@ export interface AvailabilityData {
 
 // Classe otimizada para cálculo de disponibilidade
 export class OptimizedAvailabilityService {
-    private prisma: PrismaClient;
-
-    constructor() {
-        this.prisma = new PrismaClient();
-    }
 
     // Obter disponibilidade com cache
     async getAvailability(
@@ -48,7 +43,7 @@ export class OptimizedAvailabilityService {
         employeeId: string,
         day: string
     ): Promise<{ data: AvailabilityData; source: 'db' | 'redis' | 'memory' }> {
-        const route = '/api/v1/availability';
+        const route = '/api/v1/public/availability';
         const params = { tenantId, barbershopId, employeeId, day };
 
         // Tentar obter do cache primeiro
@@ -82,14 +77,15 @@ export class OptimizedAvailabilityService {
 
         try {
             // Obter dados necessários em paralelo
-            const [services, appointments, employeeHours] = await Promise.all([
+            const [services, appointments, employeeHours, barbershopHours] = await Promise.all([
                 this.getServices(tenantId, barbershopId),
-                this.getAppointments(tenantId, employeeId, day),
-                this.getEmployeeHours(tenantId, employeeId, day),
+                employeeId ? this.getAppointments(tenantId, employeeId, day) : Promise.resolve([]),
+                employeeId ? this.getEmployeeHours(tenantId, employeeId, day) : Promise.resolve([]),
+                this.getBarbershopHours(tenantId, barbershopId, day),
             ]);
 
             // Calcular horário de funcionamento
-            const workingHours = this.calculateWorkingHours(employeeHours, day);
+            const workingHours = this.calculateWorkingHours(employeeHours, barbershopHours, day);
 
             // Gerar slots de disponibilidade
             const slots = this.generateAvailabilitySlots(
@@ -122,7 +118,7 @@ export class OptimizedAvailabilityService {
 
         return cacheService.getWithLock(cacheKey, {}, async () => {
             return readWithRetry(async () => {
-                return this.prisma.service.findMany({
+                return prisma.service.findMany({
                     where: {
                         tenantId,
                         barbershopId,
@@ -145,7 +141,7 @@ export class OptimizedAvailabilityService {
         dayEnd.setDate(dayEnd.getDate() + 1);
 
         return readWithRetry(async () => {
-            return this.prisma.appointment.findMany({
+            return prisma.appointment.findMany({
                 where: {
                     tenantId,
                     employeeId,
@@ -175,7 +171,7 @@ export class OptimizedAvailabilityService {
         const dayOfWeek = new Date(day).getDay();
 
         return readWithRetry(async () => {
-            return this.prisma.$queryRaw`
+            return prisma.$queryRaw`
         SELECT start_time, end_time, break_min
         FROM employees_hours
         WHERE employee_id = ${employeeId}
@@ -188,35 +184,102 @@ export class OptimizedAvailabilityService {
         }, 'getEmployeeHours');
     }
 
+    // Obter horários da barbearia com cache
+    private async getBarbershopHours(tenantId: string, barbershopId: string, day: string) {
+        const barbershop = await cacheService.getWithLock(
+            CACHE_KEYS.publicShop(tenantId, barbershopId),
+            {},
+            async () => {
+                return readWithRetry(async () => {
+                    return prisma.barbershop.findUnique({
+                        where: { id: barbershopId, tenantId },
+                        select: { workingHours: true },
+                    });
+                }, 'getBarbershopHours');
+            }
+        );
+
+        if (!barbershop) {
+            return null;
+        }
+
+        const { workingHours } = barbershop;
+        if (!workingHours) {
+            return null;
+        }
+
+        const dayOfWeek = new Date(day).getDay();
+        const dayHours = workingHours.find(dh => dh.weekday === dayOfWeek);
+
+        if (!dayHours) {
+            return null;
+        }
+
+        return {
+            open: dayHours.open_time,
+            close: dayHours.close_time,
+            closed: dayHours.is_closed,
+        };
+    }
+
     // Calcular horário de funcionamento
     private calculateWorkingHours(
-        employeeHours: Array<{ start_time: string; end_time: string; break_min: number }>,
+        employeeHours: Array<{ start_time: string; end_time: string; break_min: number }> | null,
+        barbershopHours: { open: string; close: string; closed: boolean } | null,
         day: string
-    ): { start: Date; end: Date; breakMinutes: number } {
-        if (employeeHours.length > 0) {
+    ): { startHour: number; endHour: number; startMinute: number; endMinute: number; startMinutes: number; endMinutes: number; isClosed: boolean } {
+        const parseRange = (open: string, close: string) => {
+            const [openHour, openMinute] = open.split(':').map(v => parseInt(v, 10));
+            const [closeHour, closeMinute] = close.split(':').map(v => parseInt(v, 10));
+            const startMinutes = openHour * 60 + openMinute;
+            let endMinutes = closeHour * 60 + closeMinute;
+            if (endMinutes <= startMinutes) {
+                endMinutes = startMinutes + 60;
+            }
+            return { openHour, openMinute, closeHour, closeMinute, startMinutes, endMinutes };
+        };
+
+        if (employeeHours && employeeHours.length > 0) {
             const hours = employeeHours[0];
-            const start = new Date(`${day}T${hours.start_time}`);
-            const end = new Date(`${day}T${hours.end_time}`);
+            const { openHour, openMinute, closeMinute, startMinutes, endMinutes } = parseRange(hours.start_time, hours.end_time);
             return {
-                start,
-                end,
-                breakMinutes: hours.break_min,
+                startHour: openHour,
+                endHour: Math.ceil(endMinutes / 60),
+                startMinute: openMinute,
+                endMinute: closeMinute,
+                startMinutes,
+                endMinutes,
+                isClosed: false,
             };
         }
 
-        // Horário padrão (8h às 18h)
-        const start = new Date(`${day}T08:00:00`);
-        const end = new Date(`${day}T18:00:00`);
+        if (barbershopHours && !barbershopHours.closed) {
+            const { openHour, openMinute, closeMinute, startMinutes, endMinutes } = parseRange(barbershopHours.open, barbershopHours.close);
+            return {
+                startHour: openHour,
+                endHour: Math.ceil(endMinutes / 60),
+                startMinute: openMinute,
+                endMinute: closeMinute,
+                startMinutes,
+                endMinutes,
+                isClosed: false,
+            };
+        }
+
         return {
-            start,
-            end,
-            breakMinutes: 60, // 1 hora de almoço
+            startHour: 8,
+            endHour: 18,
+            startMinute: 0,
+            endMinute: 0,
+            startMinutes: 8 * 60,
+            endMinutes: 18 * 60,
+            isClosed: !!barbershopHours?.closed,
         };
     }
 
     // Gerar slots de disponibilidade
     private generateAvailabilitySlots(
-        workingHours: { start: Date; end: Date; breakMinutes: number },
+        workingHours: { startHour: number; endHour: number; startMinute: number; endMinute: number; startMinutes: number; endMinutes: number; isClosed: boolean },
         services: Array<{ id: string; durationMin: number }>,
         appointments: Array<{ startAt: Date; endAt: Date; status: string }>,
         day: string
@@ -228,8 +291,8 @@ export class OptimizedAvailabilityService {
         const minServiceDuration = Math.min(...services.map(s => s.durationMin));
 
         // Criar slots de 5 em 5 minutos
-        const current = new Date(workingHours.start);
-        const end = new Date(workingHours.end);
+        const current = new Date(workingHours.startMinutes);
+        const end = new Date(workingHours.endMinutes);
 
         while (current < end) {
             const slotStart = new Date(current);

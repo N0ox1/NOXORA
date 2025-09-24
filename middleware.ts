@@ -18,11 +18,32 @@ function buildCors() {
 function isPublic(pathname: string) {
   // tolera barra final e variações
   const p = pathname.replace(/\/$/, '');
-  return p === '/api/v1/openapi.json' || p === '/api/health' || p === '/api/v1/health';
+  return p === '/api/v1/openapi.json' || p === '/api/health' || p === '/api/v1/health' || p === '/api/v1/auth/me';
 }
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  // Proteger páginas do admin
+  if (pathname.startsWith('/admin') || pathname.startsWith('/dashboard')) {
+    const token = req.cookies.get('auth-token')?.value;
+    if (!token) {
+      return NextResponse.redirect(new URL('/login', req.url));
+    }
+
+    // Verificar se o token é válido
+    try {
+      const jwtSecret = new TextEncoder().encode(process.env.JWT_SECRET || 'noxora-super-secret-jwt-key-2025-development-only-32-chars');
+      const { payload } = await jwtVerify(token, jwtSecret);
+
+      // Token válido, continuar
+      return NextResponse.next();
+    } catch {
+      // Token inválido, redirecionar para login
+      return NextResponse.redirect(new URL('/login', req.url));
+    }
+  }
+
   if (!pathname.startsWith('/api/')) return NextResponse.next();
 
   // CORS preflight sempre permitido
@@ -38,11 +59,13 @@ export async function middleware(req: NextRequest) {
     return res;
   }
 
-  // Auth obrigatória nas demais
-  const auth = req.headers.get('authorization') || '';
-  const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+  // Auth obrigatória nas demais APIs: aceita Bearer OU cookie httpOnly 'auth-token'
+  let token: string = '';
+  const authHeader = req.headers.get('authorization') || '';
+  if (authHeader.startsWith('Bearer ')) token = authHeader.slice(7);
+  if (!token) token = req.cookies.get('auth-token')?.value || '';
   if (!token) {
-    const res = NextResponse.json({ error: 'missing_bearer' }, { status: 401 });
+    const res = NextResponse.json({ error: 'missing_token' }, { status: 401 });
     buildCors().forEach((v, k) => res.headers.set(k, v));
     return res;
   }
@@ -77,4 +100,4 @@ export async function middleware(req: NextRequest) {
   return res;
 }
 
-export const config = { matcher: ['/api/:path*'] };
+export const config = { matcher: ['/api/:path*', '/dashboard/:path*'] };

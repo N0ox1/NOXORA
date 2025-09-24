@@ -28,7 +28,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ slug: strin
         select: { id: true, name: true, durationMin: true, priceCents: true }
       }),
       prisma.employee.findMany({
-        where: { tenantId, barbershopId: shop.id, active: true },
+        where: { tenantId, barbershopId: shop.id, active: true, role: 'BARBER' },
         select: { id: true, name: true, role: true }
       })
     ])

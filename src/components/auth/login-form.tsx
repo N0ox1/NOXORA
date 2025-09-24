@@ -103,7 +103,7 @@ export function LoginForm() {
     setIsLoading(true);
 
     try {
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch('/api/v1/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -121,6 +121,11 @@ export function LoginForm() {
 
       // Login bem-sucedido
       console.log('Login realizado com sucesso:', data);
+
+      // Armazenar token no localStorage para uso posterior
+      if (data.access_token) {
+        localStorage.setItem('access_token', data.access_token);
+      }
 
       // Redirecionar para o dashboard admin
       router.push('/dashboard');

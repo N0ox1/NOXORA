@@ -22,109 +22,29 @@ export async function POST(req: NextRequest) {
         try {
             // Verificações de duplicação para evitar abusos
             console.log('🔍 Verificando duplicações...');
-
-            // 1. Verificar se email já existe
-            const existingUserByEmail = await prisma.employee.findUnique({
-                where: { email: data.email }
-            });
-
-            if (existingUserByEmail) {
-                console.log('❌ Email já cadastrado:', data.email);
+            const existingByEmail = await prisma.employee.findFirst({ where: { email: data.email } });
+            if (existingByEmail) {
                 return NextResponse.json(
-                    { code: 'email_exists', message: 'Este email já está cadastrado em nosso sistema' },
+                    { code: 'email_exists', message: 'Email já cadastrado' },
                     { status: 409 }
                 );
             }
 
-            // 2. Verificar se telefone já existe
-            const existingUserByPhone = await prisma.employee.findFirst({
-                where: { phone: data.phone }
-            });
+            const domain = data.businessName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 30) || 'tenant';
 
-            if (existingUserByPhone) {
-                console.log('❌ Telefone já cadastrado:', data.phone);
-                console.log('❌ Usuário existente com este telefone:', existingUserByPhone);
-                return NextResponse.json(
-                    { code: 'phone_exists', message: 'Este telefone já está cadastrado em nosso sistema' },
-                    { status: 409 }
-                );
-            }
+            // Criar tenant, barbershop e user owner mínimos
+            const tenant = await prisma.tenant.create({ data: { name: data.businessName, domain, plan: 'STARTER', status: 'TRIALING' } as any });
+            const barbershop = await prisma.barbershop.create({ data: { tenantId: tenant.id, name: data.businessName, slug: 'main', isActive: true } as any });
+            const user = await prisma.employee.create({ data: { tenantId: tenant.id, barbershopId: barbershop.id, name: data.name, email: data.email, role: 'OWNER', active: true } as any });
 
-            // 3. Nome completo não é verificado - pode haver múltiplas pessoas com o mesmo nome
-            // 4. Nome do negócio não é verificado - pode haver múltiplas barbearias com o mesmo nome em locais diferentes
-
-            console.log('✅ Todas as verificações passaram - dados únicos');
-
-            // Criar tenant para o negócio
-            const tenant = await prisma.tenant.create({
-                data: {
-                    name: data.businessName,
-                    plan: 'STARTER',
-                    status: 'ACTIVE',
-                    isActive: true
-                }
-            });
-
-            console.log('✅ Tenant criado:', tenant.id);
-
-            // Criar barbearia para o tenant
-            const barbershop = await prisma.barbershop.create({
-                data: {
-                    tenantId: tenant.id,
-                    slug: data.businessName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
-                    name: data.businessName,
-                    description: `Barbearia ${data.businessName}`,
-                    email: data.email, // Email do proprietário como email da barbearia
-                    phone: data.phone, // Telefone do proprietário como telefone da barbearia
-                    isActive: true
-                }
-            });
-
-            console.log('✅ Barbearia criada:', barbershop.id);
-
-            // Criar usuário (Employee) sem senha por enquanto
-            console.log('🔧 Criando usuário com dados:', {
-                tenantId: tenant.id,
-                barbershopId: barbershop.id,
-                name: data.name,
-                email: data.email,
-                phone: data.phone,
-                role: 'OWNER'
-            });
-
-            const user = await prisma.employee.create({
-                data: {
-                    tenantId: tenant.id,
-                    barbershopId: barbershop.id,
-                    name: data.name,
-                    email: data.email,
-                    phone: data.phone,
-                    role: 'OWNER',
-                    active: true
-                },
-                select: {
-                    id: true,
-                    name: true,
-                    email: true,
-                    phone: true,
-                    role: true,
-                    createdAt: true
-                }
-            });
-
-            console.log('✅ Funcionário criado:', user.id);
-
-            // Processar cupom de desconto se fornecido
-            let couponMessage = '';
+            let couponMessage: string | undefined;
             if (data.hasDiscountCoupon && data.couponCode) {
-                // Aqui você pode implementar validação do cupom
-                // Por enquanto, apenas logamos o cupom
                 console.log('🎫 Cupom de desconto fornecido:', data.couponCode);
                 couponMessage = `Cupom "${data.couponCode}" será processado na próxima etapa.`;
             }
 
             // Resposta de sucesso
-            const response = {
+            const payload = {
                 ok: true,
                 message: 'Primeira etapa do cadastro concluída com sucesso',
                 data: {
@@ -136,12 +56,20 @@ export async function POST(req: NextRequest) {
                     hasDiscountCoupon: data.hasDiscountCoupon,
                     couponCode: data.couponCode,
                     couponMessage,
-                    nextStep: 'password' // Próxima etapa será definir senha
+                    nextStep: 'password'
                 }
             };
 
-            console.log('🎉 Cadastro etapa 1 concluído:', response);
-            return NextResponse.json(response, { status: 201 });
+            console.log('🎉 Cadastro etapa 1 concluído:', payload);
+            const res = NextResponse.json(payload, { status: 201 });
+
+            // Definir cookies httpOnly de contexto de registro (curta duração)
+            const secure = process.env.NODE_ENV === 'production';
+            res.cookies.set('reg_tenant_id', tenant.id, { httpOnly: true, secure, sameSite: 'lax', maxAge: 60 * 60, path: '/' });
+            res.cookies.set('reg_barbershop_id', barbershop.id, { httpOnly: true, secure, sameSite: 'lax', maxAge: 60 * 60, path: '/' });
+            res.cookies.set('reg_user_id', user.id, { httpOnly: true, secure, sameSite: 'lax', maxAge: 60 * 60, path: '/' });
+
+            return res;
 
         } catch (prismaError) {
             console.error('❌ Erro do Prisma no registro:', prismaError);

@@ -25,6 +25,8 @@ model Tenant {
   clients      Client[]
   employees    Employee[]
   services     Service[]
+  subscriptions Subscription[]
+  clientSubscriptions ClientSubscription[]
 
   @@map("tenants")
 }
@@ -50,6 +52,7 @@ model Barbershop {
   tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   employees    Employee[]
   services     Service[]
+  subscriptions Subscription[]
 
   @@unique([tenantId, slug])
   @@index([tenantId])
@@ -113,6 +116,7 @@ model Client {
   updatedAt    DateTime      @updatedAt
   appointments Appointment[]
   tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  subscriptions ClientSubscription[]
 
   @@index([tenantId])
   @@map("clients")
@@ -246,4 +250,55 @@ enum AppointmentStatus {
   CANCELED
   NO_SHOW
   DONE
+}
+
+model Subscription {
+  id           String             @id @default(cuid())
+  tenantId     String
+  barbershopId String
+  name         String
+  description  String?
+  priceCents   Int
+  durationDays Int               // Duração em dias (30, 90, 365, etc.)
+  services     Json?             // Serviços inclusos
+  benefits     Json?             // Benefícios do plano
+  isActive     Boolean           @default(true)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  barbershop   Barbershop        @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  tenant       Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  clientSubscriptions ClientSubscription[]
+
+  @@index([tenantId])
+  @@index([tenantId, barbershopId])
+  @@map("subscriptions")
+}
+
+model ClientSubscription {
+  id             String       @id @default(cuid())
+  tenantId       String
+  barbershopId   String
+  clientId       String
+  subscriptionId  String
+  status         SubscriptionStatus @default(ACTIVE)
+  startDate      DateTime
+  endDate        DateTime?
+  renewalsCount  Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  client         Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  tenant         Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([tenantId, barbershopId])
+  @@index([clientId])
+  @@map("client_subscriptions")
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAUSED
+  CANCELLED
+  EXPIRED
 }

@@ -162,13 +162,12 @@ export async function PUT(req: NextRequest) {
         });
         console.log('⏰ Horários de funcionamento recebidos:', body.workingHours);
 
-        // Buscar a barbearia atual do tenant
-        const currentBarbershop = await prisma.barbershop.findFirst({
-            where: { tenantId }
-        });
-
+        // Buscar a barbearia atual do tenant (ou criar se não existir)
+        let currentBarbershop = await prisma.barbershop.findFirst({ where: { tenantId } });
         if (!currentBarbershop) {
-            return NextResponse.json({ code: 'not_found', message: 'Barbearia não encontrada' }, { status: 404 });
+            const fallbackName = typeof body?.name === 'string' && body.name.trim() ? body.name.trim() : 'Minha Barbearia';
+            const slug = typeof body?.slug === 'string' && body.slug.trim() ? body.slug.trim() : 'main';
+            currentBarbershop = await prisma.barbershop.create({ data: { tenantId, name: fallbackName, slug, isActive: true } as any });
         }
 
         // Formatar horários antes de salvar
@@ -185,9 +184,11 @@ export async function PUT(req: NextRequest) {
         }, {}) : body.workingHours;
 
         // Atualizar apenas os campos que existem no schema atual
+        const slugFromName = (val: string) => (val ?? '');
+
         const updateData: any = {
-            name: body.name,
-            slug: body.slug,
+            name: typeof body.name === 'string' ? body.name : undefined,
+            slug: typeof body.slug === 'string' ? body.slug : (typeof body.name === 'string' ? slugFromName(body.name) : undefined),
             description: body.description,
             address: body.address,
             phone: body.phone,
