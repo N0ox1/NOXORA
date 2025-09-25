@@ -4,8 +4,8 @@ import { readWithRetry } from '@/lib/database/pool';
 
 // Configuração do algoritmo de disponibilidade
 const AVAILABILITY_CONFIG = {
-    // Janela de tempo para slots (5 minutos)
-    SLOT_WINDOW_MINUTES: 5,
+    // Janela de tempo para slots (30 minutos)
+    SLOT_WINDOW_MINUTES: 30,
     // Horário de funcionamento padrão
     DEFAULT_START_HOUR: 8,
     DEFAULT_END_HOUR: 18,
@@ -80,7 +80,7 @@ export class OptimizedAvailabilityService {
             const [services, appointments, employeeHours, barbershopHours] = await Promise.all([
                 this.getServices(tenantId, barbershopId),
                 employeeId ? this.getAppointments(tenantId, employeeId, day) : Promise.resolve([]),
-                employeeId ? this.getEmployeeHours(tenantId, employeeId, day) : Promise.resolve([]),
+                employeeId ? this.getEmployeeHours(tenantId, employeeId, day).catch(() => []) : Promise.resolve([]),
                 this.getBarbershopHours(tenantId, barbershopId, day),
             ]);
 
@@ -192,7 +192,7 @@ export class OptimizedAvailabilityService {
             async () => {
                 return readWithRetry(async () => {
                     return prisma.barbershop.findUnique({
-                        where: { id: barbershopId, tenantId },
+                        where: { id: barbershopId },
                         select: { workingHours: true },
                     });
                 }, 'getBarbershopHours');
@@ -203,23 +203,46 @@ export class OptimizedAvailabilityService {
             return null;
         }
 
-        const { workingHours } = barbershop;
+        const { workingHours } = barbershop as { workingHours: any };
         if (!workingHours) {
             return null;
         }
 
-        const dayOfWeek = new Date(day).getDay();
-        const dayHours = workingHours.find(dh => dh.weekday === dayOfWeek);
+        // Normalizar diferentes formatos de workingHours armazenados
+        // Formato 1 (comum): [{ weekday: 1-7|0-6, open: '09:00', close: '21:00', is_closed: false }]
+        // Formato 2 (legado): [{ weekday: 0-6, open_time: '09:00', close_time: '21:00', is_closed: false }]
+        try {
+            const dayOfWeek = new Date(day).getDay(); // 0=Domingo
+            const list = Array.isArray(workingHours) ? workingHours : [];
 
-        if (!dayHours) {
+            // Tentar casar por 'weekday' com 0-6
+            let dayHours: any = list.find((dh: any) => dh.weekday === dayOfWeek);
+            // Alternativa: alguns salvam 1-7, onde 1=Domingo ou 1=Segunda. Tentar 1-7 (Domingo=1)
+            if (!dayHours) {
+                const altKey = ((dayOfWeek + 1) % 7) + 1; // 0->1, 1->2, ... 6->7
+                dayHours = list.find((dh: any) => dh.weekday === altKey);
+            }
+
+            if (!dayHours) {
+                return null;
+            }
+
+            const open = typeof dayHours.open === 'string' ? dayHours.open
+                : typeof dayHours.open_time === 'string' ? dayHours.open_time
+                    : null;
+            const close = typeof dayHours.close === 'string' ? dayHours.close
+                : typeof dayHours.close_time === 'string' ? dayHours.close_time
+                    : null;
+            const closed = !!dayHours.is_closed;
+
+            if (!open || !close) {
+                return null;
+            }
+
+            return { open, close, closed };
+        } catch {
             return null;
         }
-
-        return {
-            open: dayHours.open_time,
-            close: dayHours.close_time,
-            closed: dayHours.is_closed,
-        };
     }
 
     // Calcular horário de funcionamento
@@ -287,12 +310,17 @@ export class OptimizedAvailabilityService {
         const slots: AvailabilitySlot[] = [];
         const slotDuration = AVAILABILITY_CONFIG.SLOT_WINDOW_MINUTES;
 
-        // Duração mínima de serviço
-        const minServiceDuration = Math.min(...services.map(s => s.durationMin));
+        // Duração mínima de serviço (fallback para duração mínima de slot se lista vazia)
+        const minServiceDuration = services.length > 0
+            ? Math.min(...services.map(s => s.durationMin))
+            : AVAILABILITY_CONFIG.MIN_SLOT_DURATION_MINUTES;
 
-        // Criar slots de 5 em 5 minutos
-        const current = new Date(workingHours.startMinutes);
-        const end = new Date(workingHours.endMinutes);
+        // Base do dia (00:00 local) e aplicar minutos de funcionamento
+        const dayBase = new Date(day + 'T00:00:00');
+        const current = new Date(dayBase);
+        current.setMinutes(workingHours.startMinutes);
+        const end = new Date(dayBase);
+        end.setMinutes(workingHours.endMinutes);
 
         while (current < end) {
             const slotStart = new Date(current);

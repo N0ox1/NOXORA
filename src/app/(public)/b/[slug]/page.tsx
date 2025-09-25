@@ -104,6 +104,8 @@ export default function BarbershopPage() {
     phone: '',
     email: ''
   });
+  // Flag: usuário já escolheu preferência ("sem preferência") ou um barbeiro específico
+  const [barberChoiceMade, setBarberChoiceMade] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isBooking, setIsBooking] = useState(false);
 
@@ -152,6 +154,7 @@ export default function BarbershopPage() {
     (async () => {
       try {
         setLoadingSlots(true);
+        const groups: AvailabilityGroup[] = [];
 
         const employeeIds = employeePreference === 'any'
           ? employees.map(emp => emp.id)
@@ -268,6 +271,7 @@ export default function BarbershopPage() {
     setEmployeePreference('any');
     setSelectedDate('');
     setSelectedTime('');
+    setBarberChoiceMade(false);
   };
 
   const handleEmployeeSelect = (employee: Employee) => {
@@ -275,6 +279,7 @@ export default function BarbershopPage() {
     setSelectedEmployee(employee);
     setSelectedDate('');
     setSelectedTime('');
+    setBarberChoiceMade(true);
   };
 
   const handleAnyEmployeeSelect = () => {
@@ -282,6 +287,7 @@ export default function BarbershopPage() {
     setSelectedEmployee(null);
     setSelectedDate('');
     setSelectedTime('');
+    setBarberChoiceMade(true);
   };
 
   const handleDateSelect = (date: string) => {
@@ -315,11 +321,11 @@ export default function BarbershopPage() {
 
       // 1. Primeiro, criar o cliente
       console.log('Criando cliente...');
-      const clientResponse = await fetch('http://localhost:3000/api/v1/clients', {
+      const clientResponse = await fetch('/api/v1/clients', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-tenant-id': 'cmffwm0j20000uaoo2c4ugtvx'
+          'x-tenant-id': barbershop?.tenantId || ''
         },
         body: JSON.stringify({
           name: clientInfo.name.trim(),
@@ -347,17 +353,17 @@ export default function BarbershopPage() {
         clientId: client.client.id,
         employeeId: selectedEmployee.id,
         serviceId: selectedService.id,
-        barbershopId: 'cmffwm0ks0002uaoot2x03802', // ID real da barbearia
+        barbershopId: barbershop?.id,
         scheduledAt: new Date(`${selectedDate}T${selectedTime}:00`).toISOString(),
         notes: `Cliente: ${clientInfo.name}, Telefone: ${clientInfo.phone}`
       };
       console.log('Dados do agendamento:', appointmentData);
 
-      const appointmentResponse = await fetch('http://localhost:3000/api/v1/appointments', {
+      const appointmentResponse = await fetch('/api/v1/appointments', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-tenant-id': 'cmffwm0j20000uaoo2c4ugtvx'
+          'x-tenant-id': barbershop?.tenantId || ''
         },
         body: JSON.stringify(appointmentData)
       });
@@ -506,7 +512,7 @@ export default function BarbershopPage() {
         )}
 
         {/* Etapa 2: Seleção de Funcionário */}
-        {selectedService && !selectedEmployee && employeePreference === 'any' && (
+        {selectedService && !barberChoiceMade && employeePreference === 'any' && (
           <div className="bg-gray-800 rounded-lg border border-gray-700 p-8">
             <h2 className="text-2xl font-semibold text-white mb-2">Escolha o Barbeiro</h2>
             <p className="text-gray-400 mb-6">Selecione o profissional ou siga sem preferência</p>
@@ -529,7 +535,7 @@ export default function BarbershopPage() {
                 <div
                   key={employee.id}
                   onClick={() => handleEmployeeSelect(employee)}
-                  className={`p-6 border ${employeePreference === 'specific' && selectedEmployee?.id === employee.id ? 'border-[#01ABFE]' : 'border-gray-600'} rounded-lg cursor-pointer transition-all hover:scale-105 bg-gray-700`}
+                  className={`p-6 border ${selectedEmployee?.id === employee.id ? 'border-[#01ABFE]' : 'border-gray-600'} rounded-lg cursor-pointer transition-all hover:scale-105 bg-gray-700`}
                 >
                   <div className="flex items-center">
                     <div className="w-16 h-16 bg-gray-600 rounded-full flex items-center justify-center mr-4">
@@ -648,7 +654,7 @@ export default function BarbershopPage() {
           </div>
         )}
 
-        {selectedService && employeePreference === 'any' && !selectedTime && (
+        {selectedService && barberChoiceMade && employeePreference === 'any' && !selectedTime && (
           <div className="space-y-6">
             <div className="bg-gray-800 rounded-lg border border-gray-700 p-8">
               <h2 className="text-2xl font-semibold text-white mb-2">Escolha a Data</h2>
@@ -748,50 +754,7 @@ export default function BarbershopPage() {
           </div>
         )}
 
-        {selectedService && employeePreference === 'specific' && selectedEmployee && selectedDate && !selectedTime && (
-          <div className="bg-gray-800 rounded-lg border border-gray-700 p-8">
-            <h2 className="text-2xl font-semibold text-white mb-2">
-              Horários Disponíveis
-            </h2>
-            <p className="text-gray-400 mb-6">
-              {selectedDate
-                ? `Selecione o horário para ${(() => {
-                  const parsed = new Date(selectedDate);
-                  return Number.isNaN(parsed.getTime())
-                    ? selectedDate
-                    : parsed.toLocaleDateString('pt-BR');
-                })()}`
-                : 'Selecione o horário'}
-            </p>
-            <div className="grid grid-cols-4 gap-3">
-              {loadingSlots && (
-                <div className="col-span-4 text-sm text-gray-300">Carregando horários...</div>
-              )}
-              {availabilityError && !loadingSlots && (
-                <div className="col-span-4 text-sm text-red-400">{availabilityError}</div>
-              )}
-              {!availabilityError && !loadingSlots && availableSlots.length === 0 && (
-                <div className="col-span-4 text-sm text-gray-300">Nenhum horário disponível para este dia.</div>
-              )}
-              {availableSlots
-                .find(group => group.employeeId === selectedEmployee.id)?.slots.map((slot, index) => (
-                  <button
-                    key={index}
-                    onClick={() => slot.available && handleTimeSelect(slot.time)}
-                    disabled={!slot.available}
-                    className={`p-3 text-center rounded-lg border transition-all hover:scale-105 ${!slot.available
-                      ? 'border-gray-600 text-gray-500 cursor-not-allowed bg-gray-700'
-                      : selectedTime === slot.time
-                        ? 'border-[#01ABFE] bg-[#01ABFE] text-white'
-                        : 'border-gray-600 bg-gray-700 hover:border-gray-500 text-white'}
-                    `}
-                  >
-                    {slot.time}
-                  </button>
-                ))}
-            </div>
-          </div>
-        )}
+
 
         {/* Etapa 4: Formulário e Resumo */}
         {selectedTime && (
