@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { CalendarDaysIcon, ClockIcon, UserIcon, PhoneIcon } from '@heroicons/react/24/outline';
 import BookButton from '@/components/book-button';
 
@@ -80,12 +80,34 @@ export async function NoxoraPublicServices({ slug }: { slug: string }) {
 export default function BarbershopPage() {
   const params = useParams();
   const slug = params.slug as string;
+  const router = useRouter();
 
   // Evitar hydration mismatch: só renderizar após montar no cliente
   const [mounted, setMounted] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Guard de autenticação do cliente: se não autenticado, enviar para /b/[slug]/login
+  useEffect(() => {
+    if (!mounted) return;
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch('/api/v1/public/auth/me', { cache: 'no-store' });
+        if (!alive) return;
+        if (res.ok) {
+          setAuthChecked(true);
+        } else {
+          router.replace(`/b/${slug}/login`);
+        }
+      } catch {
+        if (alive) router.replace(`/b/${slug}/login`);
+      }
+    })();
+    return () => { alive = false; };
+  }, [mounted, router, slug]);
 
   const [barbershop, setBarbershop] = useState<BarbershopInfo | null>(null);
   const [services, setServices] = useState<Service[]>([]);
@@ -108,13 +130,15 @@ export default function BarbershopPage() {
   const [barberChoiceMade, setBarberChoiceMade] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isBooking, setIsBooking] = useState(false);
+  const [activeTab, setActiveTab] = useState<'booking' | 'subscription' | 'history' | 'profile'>('booking');
 
   // Removidos mocks: sempre usar dados reais da API
 
-  // Carregar dados reais da API pública
+  // Carregar dados reais da API pública (após autenticação confirmada)
   useEffect(() => {
     let alive = true;
     (async () => {
+      if (!authChecked) return;
       try {
         setIsLoading(true);
         const data = await noxoraFetchShop(slug);
@@ -140,7 +164,7 @@ export default function BarbershopPage() {
       }
     })();
     return () => { alive = false; };
-  }, [slug]);
+  }, [slug, authChecked]);
 
   // Gerar slots de horário disponíveis
   useEffect(() => {
@@ -157,56 +181,81 @@ export default function BarbershopPage() {
         const groups: AvailabilityGroup[] = [];
 
         const employeeIds = employeePreference === 'any'
-          ? employees.map(emp => emp.id)
+          ? [] // Para "sem preferência", não buscar por barbeiro específico
           : selectedEmployee
             ? [selectedEmployee.id]
             : [];
 
-        if (employeeIds.length === 0 && employeePreference === 'any') {
-          const params = new URLSearchParams({
-            date: selectedDate,
-            barbershopId: barbershop.id,
-            serviceId: selectedService.id,
-          });
-          const res = await fetch(`/api/v1/public/availability?${params.toString()}`, {
-            cache: 'no-store',
-            headers: {
-              'x-tenant-id': barbershop.tenantId
+        if (employeePreference === 'any') {
+          // Buscar disponibilidade de todos os barbeiros e combinar em uma única lista
+          const allSlots: AppointmentSlot[] = [];
+          const timeToEmployees = new Map<string, string[]>(); // Mapear horário para barbeiros disponíveis
+
+          for (const employee of employees) {
+            const params = new URLSearchParams({
+              date: selectedDate,
+              barbershopId: barbershop.id,
+              employeeId: employee.id,
+              serviceId: selectedService.id,
+            });
+            const res = await fetch(`/api/v1/public/availability?${params.toString()}`, {
+              cache: 'no-store',
+              headers: {
+                'x-tenant-id': barbershop.tenantId
+              }
+            });
+
+            if (!alive) return;
+
+            if (!res.ok) {
+              console.error('Erro ao buscar disponibilidade:', employee.id, res.status, res.statusText);
+              continue; // Continuar com outros barbeiros mesmo se um falhar
             }
-          });
 
-          if (!alive) return;
-
-          if (!res.ok) {
-            console.error('Erro ao buscar disponibilidade (qualquer barbeiro):', res.status, res.statusText);
-            setAvailableSlots([]);
-            setAvailabilityError('Não foi possível carregar os horários disponíveis. Tente novamente em instantes.');
-            return;
-          }
-
-          const data = await res.json();
-          const grouped = new Map<string, AppointmentSlot[]>();
-
-          (data.availableSlots || []).forEach((slot: any) => {
-            const key = slot.time;
-            const list = grouped.get(key) || [];
-            list.push({
+            const data = await res.json();
+            const slots = (data.availableSlots || []).map((slot: any) => ({
               time: slot.time,
               available: slot.available,
-              employee_id: slot.employeeId || null
+              employee_id: employee.id
+            }));
+
+            allSlots.push(...slots);
+
+            // Mapear horários para barbeiros disponíveis
+            slots.forEach((slot: AppointmentSlot) => {
+              if (!timeToEmployees.has(slot.time)) {
+                timeToEmployees.set(slot.time, []);
+              }
+              timeToEmployees.get(slot.time)!.push(employee.id);
             });
+          }
+
+          // Agrupar por horário e remover duplicatas
+          const grouped = new Map<string, AppointmentSlot[]>();
+          allSlots.forEach(slot => {
+            const key = slot.time;
+            const list = grouped.get(key) || [];
+            list.push(slot);
             grouped.set(key, list);
           });
 
-          const combined: AvailabilityGroup[] = Array.from(grouped.entries()).map(([time, slots]) => {
-            return {
-              employeeId: null,
-              employeeName: slots.length > 1 ? 'Vários barbeiros' : 'Barbeiro disponível',
-              slots: slots.map(slot => ({ ...slot, time }))
-            };
-          }).sort((a, b) => a.slots[0].time.localeCompare(b.slots[0].time));
+          // Criar uma única lista de horários disponíveis
+          const combined: AvailabilityGroup[] = [{
+            employeeId: null,
+            employeeName: 'Horários Disponíveis',
+            slots: Array.from(grouped.entries())
+              .map(([time, slots]) => ({
+                time,
+                available: true,
+                employee_id: slots[Math.floor(Math.random() * slots.length)].employee_id // Escolher aleatoriamente
+              }))
+              .sort((a, b) => a.time.localeCompare(b.time))
+          }];
 
           groups.push(...combined);
+
+          // Armazenar o mapeamento para uso no onClick
+          (window as any).timeToEmployees = timeToEmployees;
         } else {
           for (const id of employeeIds) {
             const params = new URLSearchParams({
@@ -264,6 +313,15 @@ export default function BarbershopPage() {
       alive = false;
     };
   }, [selectedDate, selectedService, selectedEmployee, barbershop, employeePreference, employees]);
+
+  if (!mounted || !authChecked) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center bg-black text-white">
+        <div className="opacity-70 text-sm">Carregando...</div>
+      </div>
+    );
+  }
+
 
   const handleServiceSelect = (service: Service) => {
     setSelectedService(service);
@@ -469,417 +527,595 @@ export default function BarbershopPage() {
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Etapa 1: Seleção de Serviço */}
-        {!selectedService && (
-          <div className="bg-gray-800 rounded-lg border border-gray-700 p-8">
-            <h2 className="text-2xl font-semibold text-white mb-2">Escolha o Serviço</h2>
-            <p className="text-gray-400 mb-6">Selecione o serviço desejado</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {services.map((service) => (
-                <div
-                  key={service.id}
-                  onClick={() => handleServiceSelect(service)}
-                  className="p-6 border border-gray-600 rounded-lg cursor-pointer transition-all hover:scale-105 bg-gray-700 hover:border-[#01ABFE]"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start">
-                      <div className="w-12 h-12 bg-[#01ABFE]/20 rounded-lg flex items-center justify-center mr-4">
-                        <svg className="w-6 h-6 text-[#01ABFE]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                        </svg>
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 grid grid-cols-12 gap-6">
+        <aside className="hidden lg:block col-span-3">
+          <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
+            <nav className="space-y-2">
+              <button
+                onClick={() => setActiveTab('booking')}
+                className={`${activeTab === 'booking' ? 'bg-[#01ABFE] text-white' : 'hover:bg-gray-700 text-gray-200'} w-full text-left px-3 py-2 rounded font-medium`}
+              >
+                Agendamento
+              </button>
+              <button
+                onClick={() => setActiveTab('subscription')}
+                className={`${activeTab === 'subscription' ? 'bg-[#01ABFE] text-white' : 'hover:bg-gray-700 text-gray-200'} w-full text-left px-3 py-2 rounded font-medium`}
+              >
+                Assinatura
+              </button>
+              <button
+                onClick={() => setActiveTab('history')}
+                className={`${activeTab === 'history' ? 'bg-[#01ABFE] text-white' : 'hover:bg-gray-700 text-gray-200'} w-full text-left px-3 py-2 rounded font-medium`}
+              >
+                Histórico de agendamento
+              </button>
+              <button
+                onClick={() => setActiveTab('profile')}
+                className={`${activeTab === 'profile' ? 'bg-[#01ABFE] text-white' : 'hover:bg-gray-700 text-gray-200'} w-full text-left px-3 py-2 rounded font-medium`}
+              >
+                Perfil
+              </button>
+            </nav>
+          </div>
+        </aside>
+
+        <main className="col-span-12 lg:col-span-9">
+          {activeTab === 'booking' && (
+            <>
+              {/* Etapa 1: Seleção de Serviço */}
+              {!selectedService && (
+                <div className="bg-gray-800 rounded-lg border border-gray-700 p-8">
+                  <h2 className="text-2xl font-semibold text-white mb-2">Escolha o Serviço</h2>
+                  <p className="text-gray-400 mb-6">Selecione o serviço desejado</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {services.map((service) => (
+                      <div
+                        key={service.id}
+                        onClick={() => handleServiceSelect(service)}
+                        className="p-6 border border-gray-600 rounded-lg cursor-pointer transition-all hover:scale-105 bg-gray-700 hover:border-[#01ABFE]"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-start">
+                            <div className="w-12 h-12 bg-[#01ABFE]/20 rounded-lg flex items-center justify-center mr-4">
+                              <svg className="w-6 h-6 text-[#01ABFE]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                              </svg>
+                            </div>
+                            <div>
+                              <h3 className="font-semibold text-white text-lg">{service.name}</h3>
+                              {service.description && (
+                                <p className="text-gray-400 text-sm mt-1">{service.description}</p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-xl font-bold text-[#01ABFE]">
+                              {formatPrice(service.price_cents)}
+                            </div>
+                            <div className="text-sm text-gray-400">
+                              {formatDuration(service.duration_min)}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Etapa 2: Seleção de Funcionário */}
+              {selectedService && !barberChoiceMade && employeePreference === 'any' && (
+                <div className="bg-gray-800 rounded-lg border border-gray-700 p-8">
+                  <h2 className="text-2xl font-semibold text-white mb-2">Escolha o Barbeiro</h2>
+                  <p className="text-gray-400 mb-6">Selecione o profissional ou siga sem preferência</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div
+                      onClick={handleAnyEmployeeSelect}
+                      className={`p-6 border ${employeePreference === 'any' ? 'border-[#01ABFE]' : 'border-gray-600'} rounded-lg cursor-pointer transition-all hover:scale-105 bg-gray-700`}
+                    >
+                      <div className="flex items-center">
+                        <div className="w-16 h-16 bg-[#01ABFE]/20 rounded-full flex items-center justify-center mr-4">
+                          <UserIcon className="h-8 w-8 text-[#01ABFE]" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-white text-lg">Sem preferência</h3>
+                          <p className="text-gray-400 text-sm">Encontraremos o melhor horário disponível</p>
+                        </div>
+                      </div>
+                    </div>
+                    {employees.filter(emp => emp.active).map((employee, idx) => (
+                      <div
+                        key={employee.id}
+                        onClick={() => handleEmployeeSelect(employee)}
+                        className={`p-6 border ${selectedEmployee?.id === employee.id ? 'border-[#01ABFE]' : 'border-gray-600'} rounded-lg cursor-pointer transition-all hover:scale-105 bg-gray-700`}
+                      >
+                        <div className="flex items-center">
+                          <div className="w-16 h-16 bg-gray-600 rounded-full flex items-center justify-center mr-4">
+                            <UserIcon className="h-8 w-8 text-gray-300" />
+                          </div>
+                          <div>
+                            <h3 className="font-semibold text-white text-lg">{employee.name}</h3>
+                            <p className="text-gray-400">Barbeiro</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {selectedService && employeePreference === 'specific' && selectedEmployee && !selectedTime && (
+                <div className="space-y-6">
+                  {/* Seleção de Data */}
+                  <div className="bg-gray-800 rounded-lg border border-gray-700 p-8">
+                    <h2 className="text-2xl font-semibold text-white mb-2">Escolha a Data</h2>
+                    <p className="text-gray-400 mb-6">Selecione o dia desejado</p>
+                    <div className="grid grid-cols-7 gap-3">
+                      {Array.from({ length: 14 }, (_, i) => {
+                        const date = new Date();
+                        date.setDate(date.getDate() + i);
+                        const dateStr = date.toISOString().split('T')[0];
+                        const dayName = date.toLocaleDateString('pt-BR', { weekday: 'short' });
+                        const dayNumber = date.getDate();
+
+                        return (
+                          <button
+                            key={i}
+                            onClick={() => handleDateSelect(dateStr)}
+                            className={`p-4 text-center rounded-lg border transition-all hover:scale-105 ${selectedDate === dateStr
+                              ? 'border-[#01ABFE] bg-[#01ABFE] text-white'
+                              : 'border-gray-600 bg-gray-700 hover:border-gray-500 text-white'
+                              }`}
+                          >
+                            <div className="text-xs font-medium">{dayName}</div>
+                            <div className="text-lg font-semibold">{dayNumber}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {selectedDate && (
+                    <div className="bg-gray-800 rounded-lg border border-gray-700 p-8">
+                      <h2 className="text-2xl font-semibold text-white mb-2">
+                        Horários Disponíveis
+                      </h2>
+                      <p className="text-gray-400 mb-6">
+                        {selectedDate
+                          ? `Selecione o horário para ${(() => {
+                            const parsed = new Date(selectedDate);
+                            return Number.isNaN(parsed.getTime())
+                              ? selectedDate
+                              : parsed.toLocaleDateString('pt-BR');
+                          })()}`
+                          : 'Selecione o horário'}
+                      </p>
+                      <div className="grid grid-cols-4 gap-3">
+                        {loadingSlots && (
+                          <div className="col-span-4 text-sm text-gray-300">Carregando horários...</div>
+                        )}
+                        {availabilityError && !loadingSlots && (
+                          <div className="col-span-4 text-sm text-red-400">{availabilityError}</div>
+                        )}
+                        {!availabilityError && !loadingSlots && availableSlots.length === 0 && (
+                          <div className="col-span-4 text-sm text-gray-300">Nenhum horário disponível para este dia.</div>
+                        )}
+                        {availableSlots.map(group => (
+                          <div key={group.employeeId || 'any'} className="bg-gray-700 rounded-lg p-4 border border-gray-600">
+                            <h3 className="text-white font-medium text-sm mb-3">
+                              {group.employeeId ? `Com ${group.employeeName}` : 'Melhor horário disponível'}
+                            </h3>
+                            <div className="grid grid-cols-2 gap-2">
+                              {group.slots.length === 0 && (
+                                <span className="col-span-2 text-xs text-gray-400">Sem horários disponíveis.</span>
+                              )}
+                              {group.slots.map((slot, index) => (
+                                <button
+                                  key={`${group.employeeId || 'any'}-${index}`}
+                                  onClick={() => {
+                                    setSelectedTime(slot.time);
+                                    if (group.employeeId) {
+                                      setSelectedEmployee(employees.find(emp => emp.id === group.employeeId) || null);
+                                      setEmployeePreference('specific');
+                                    } else {
+                                      const options = slot.employee_id
+                                        ? [slot.employee_id]
+                                        : employees.map(emp => emp.id);
+                                      if (options.length > 0) {
+                                        const randomIndex = Math.floor((lastRandomSeed + index) % options.length);
+                                        const randomId = options[randomIndex];
+                                        setSelectedEmployee(employees.find(emp => emp.id === randomId) || null);
+                                      }
+                                      setEmployeePreference('specific');
+                                    }
+                                  }}
+                                  className={`p-3 text-center rounded-lg border transition-all hover:scale-105 ${selectedTime === slot.time
+                                    ? 'border-[#01ABFE] bg-[#01ABFE] text-white'
+                                    : 'border-gray-600 bg-gray-700 hover:border-gray-500 text-white'}
+                            `}
+                                >
+                                  {slot.time}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {selectedService && barberChoiceMade && employeePreference === 'any' && !selectedTime && (
+                <div className="space-y-6">
+                  <div className="bg-gray-800 rounded-lg border border-gray-700 p-8">
+                    <h2 className="text-2xl font-semibold text-white mb-2">Escolha a Data</h2>
+                    <p className="text-gray-400 mb-6">Selecione o dia desejado</p>
+                    <div className="grid grid-cols-7 gap-3">
+                      {Array.from({ length: 14 }, (_, i) => {
+                        const date = new Date();
+                        date.setDate(date.getDate() + i);
+                        const dateStr = date.toISOString().split('T')[0];
+                        const dayName = date.toLocaleDateString('pt-BR', { weekday: 'short' });
+                        const dayNumber = date.getDate();
+
+                        return (
+                          <button
+                            key={i}
+                            onClick={() => handleDateSelect(dateStr)}
+                            className={`p-4 text-center rounded-lg border transition-all hover:scale-105 ${selectedDate === dateStr
+                              ? 'border-[#01ABFE] bg-[#01ABFE] text-white'
+                              : 'border-gray-600 bg-gray-700 hover:border-gray-500 text-white'
+                              }`}
+                          >
+                            <div className="text-xs font-medium">{dayName}</div>
+                            <div className="text-lg font-semibold">{dayNumber}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {selectedDate && (
+                    <div className="bg-gray-800 rounded-lg border border-gray-700 p-8">
+                      <h2 className="text-2xl font-semibold text-white mb-2">
+                        Horários Disponíveis
+                      </h2>
+                      <p className="text-gray-400 mb-6">
+                        {selectedDate
+                          ? `Selecione o horário para ${(() => {
+                            const parsed = new Date(selectedDate);
+                            return Number.isNaN(parsed.getTime())
+                              ? selectedDate
+                              : parsed.toLocaleDateString('pt-BR');
+                          })()}`
+                          : 'Selecione o horário'}
+                      </p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {loadingSlots && (
+                          <div className="col-span-full text-sm text-gray-300">Carregando horários...</div>
+                        )}
+                        {availabilityError && !loadingSlots && (
+                          <div className="col-span-full text-sm text-red-400">{availabilityError}</div>
+                        )}
+                        {!availabilityError && !loadingSlots && availableSlots.length === 0 && (
+                          <div className="col-span-full text-sm text-gray-300">Nenhum horário disponível para este dia.</div>
+                        )}
+                        {availableSlots.map(group => (
+                          <div key={group.employeeId || 'any'} className="bg-gray-700 rounded-lg p-4 border border-gray-600">
+                            <h3 className="text-white font-medium text-sm mb-3">
+                              {group.employeeId ? `Com ${group.employeeName}` : 'Horários Disponíveis'}
+                            </h3>
+                            <div className="grid grid-cols-2 gap-2">
+                              {group.slots.length === 0 && (
+                                <span className="col-span-2 text-xs text-gray-400">Sem horários disponíveis.</span>
+                              )}
+                              {group.slots.map((slot, index) => (
+                                <button
+                                  key={`${group.employeeId || 'any'}-${index}`}
+                                  onClick={() => {
+                                    setSelectedTime(slot.time);
+                                    if (group.employeeId) {
+                                      setSelectedEmployee(employees.find(emp => emp.id === group.employeeId) || null);
+                                      setEmployeePreference('specific');
+                                    } else {
+                                      // Para "Sem preferência", selecionar um barbeiro disponível para este horário
+                                      const timeToEmployees = (window as any).timeToEmployees as Map<string, string[]>;
+                                      const availableEmployeeIds = timeToEmployees.get(slot.time) || [];
+                                      if (availableEmployeeIds.length > 0) {
+                                        const randomId = availableEmployeeIds[Math.floor(Math.random() * availableEmployeeIds.length)];
+                                        const randomEmployee = employees.find(emp => emp.id === randomId);
+                                        if (randomEmployee) {
+                                          setSelectedEmployee(randomEmployee);
+                                        }
+                                      }
+                                      setEmployeePreference('specific');
+                                    }
+                                  }}
+                                  className={`p-3 text-center rounded-lg border transition-all hover:scale-105 ${selectedTime === slot.time
+                                    ? 'border-[#01ABFE] bg-[#01ABFE] text-white'
+                                    : 'border-gray-600 bg-gray-700 hover:border-gray-500 text-white'}
+                            `}
+                                >
+                                  {slot.time}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+
+
+              {/* Etapa 4: Formulário e Resumo */}
+              {selectedTime && (
+                <div className="space-y-6">
+                  {/* Formulário de Cliente */}
+                  <div className="bg-gray-800 rounded-lg border border-gray-700 p-8">
+                    <h2 className="text-2xl font-semibold text-white mb-2">Seus Dados</h2>
+                    <p className="text-gray-400 mb-6">Preencha suas informações para finalizar o agendamento</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Nome Completo *
+                        </label>
+                        <input
+                          type="text"
+                          value={clientInfo.name}
+                          onChange={(e) => handleClientInfoChange('name', e.target.value)}
+                          className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-[#01ABFE] focus:border-[#01ABFE]"
+                          placeholder="Seu nome completo"
+                        />
                       </div>
                       <div>
-                        <h3 className="font-semibold text-white text-lg">{service.name}</h3>
-                        {service.description && (
-                          <p className="text-gray-400 text-sm mt-1">{service.description}</p>
-                        )}
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Telefone *
+                        </label>
+                        <input
+                          type="tel"
+                          value={clientInfo.phone}
+                          onChange={(e) => handleClientInfoChange('phone', e.target.value)}
+                          className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-[#01ABFE] focus:border-[#01ABFE]"
+                          placeholder="(11) 90000-0000"
+                        />
                       </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-xl font-bold text-[#01ABFE]">
-                        {formatPrice(service.price_cents)}
-                      </div>
-                      <div className="text-sm text-gray-400">
-                        {formatDuration(service.duration_min)}
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Email (opcional)
+                        </label>
+                        <input
+                          type="email"
+                          value={clientInfo.email}
+                          onChange={(e) => handleClientInfoChange('email', e.target.value)}
+                          className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-[#01ABFE] focus:border-[#01ABFE]"
+                          placeholder="seu@email.com"
+                        />
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
-        {/* Etapa 2: Seleção de Funcionário */}
-        {selectedService && !barberChoiceMade && employeePreference === 'any' && (
-          <div className="bg-gray-800 rounded-lg border border-gray-700 p-8">
-            <h2 className="text-2xl font-semibold text-white mb-2">Escolha o Barbeiro</h2>
-            <p className="text-gray-400 mb-6">Selecione o profissional ou siga sem preferência</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div
-                onClick={handleAnyEmployeeSelect}
-                className={`p-6 border ${employeePreference === 'any' ? 'border-[#01ABFE]' : 'border-gray-600'} rounded-lg cursor-pointer transition-all hover:scale-105 bg-gray-700`}
-              >
-                <div className="flex items-center">
-                  <div className="w-16 h-16 bg-[#01ABFE]/20 rounded-full flex items-center justify-center mr-4">
-                    <UserIcon className="h-8 w-8 text-[#01ABFE]" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-white text-lg">Sem preferência</h3>
-                    <p className="text-gray-400 text-sm">Encontraremos o melhor horário disponível</p>
-                  </div>
-                </div>
-              </div>
-              {employees.filter(emp => emp.active).map((employee, idx) => (
-                <div
-                  key={employee.id}
-                  onClick={() => handleEmployeeSelect(employee)}
-                  className={`p-6 border ${selectedEmployee?.id === employee.id ? 'border-[#01ABFE]' : 'border-gray-600'} rounded-lg cursor-pointer transition-all hover:scale-105 bg-gray-700`}
-                >
-                  <div className="flex items-center">
-                    <div className="w-16 h-16 bg-gray-600 rounded-full flex items-center justify-center mr-4">
-                      <UserIcon className="h-8 w-8 text-gray-300" />
+                  {/* Resumo do Agendamento */}
+                  <div className="bg-gray-800 rounded-lg border border-gray-700 p-8">
+                    <h2 className="text-2xl font-semibold text-white mb-2">Resumo do Agendamento</h2>
+                    <p className="text-gray-400 mb-6">Confira os detalhes antes de confirmar</p>
+                    <div className="bg-gray-700 rounded-lg p-6">
+                      <div className="space-y-4 text-sm">
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-300">Serviço:</span>
+                          <span className="font-medium text-white text-lg">{selectedService?.name}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-300">Profissional:</span>
+                          <span className="font-medium text-white">
+                            {employeePreference === 'any' && !selectedEmployee
+                              ? 'Sem preferência'
+                              : selectedEmployee?.name}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-300">Data:</span>
+                          <span className="font-medium text-white">
+                            {selectedDate
+                              ? (() => {
+                                const parsed = new Date(selectedDate);
+                                return Number.isNaN(parsed.getTime())
+                                  ? selectedDate
+                                  : parsed.toLocaleDateString('pt-BR');
+                              })()
+                              : '--/--/----'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-300">Horário:</span>
+                          <span className="font-medium text-white">{selectedTime}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-300">Duração:</span>
+                          <span className="font-medium text-white">{formatDuration(selectedService?.duration_min || 0)}</span>
+                        </div>
+                        <div className="flex justify-between items-center pt-4 border-t border-gray-600">
+                          <span className="font-semibold text-white text-lg">Total:</span>
+                          <span className="font-bold text-2xl text-[#01ABFE]">
+                            {formatPrice(selectedService?.price_cents || 0)}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="font-semibold text-white text-lg">{employee.name}</h3>
-                      <p className="text-gray-400">Barbeiro</p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
-        {selectedService && employeePreference === 'specific' && selectedEmployee && !selectedTime && (
-          <div className="space-y-6">
-            {/* Seleção de Data */}
+                    {/* Botões de Navegação */}
+                    <div className="flex justify-between mt-8">
+                      <button
+                        onClick={() => {
+                          setSelectedTime('');
+                          setClientInfo({ name: '', phone: '', email: '' });
+                        }}
+                        className="px-6 py-3 bg-gray-600 text-white rounded-lg font-medium hover:bg-gray-500 transition-colors flex items-center"
+                      >
+                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                        </svg>
+                        Voltar
+                      </button>
+                      <button
+                        onClick={handleBooking}
+                        disabled={isBooking || !clientInfo.name || !clientInfo.phone}
+                        className="px-8 py-3 bg-[#01ABFE] text-white rounded-lg font-medium hover:bg-[#01ABFE]/90 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors flex items-center"
+                      >
+                        {isBooking ? 'Agendando...' : 'Confirmar Agendamento'}
+                        <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {activeTab === 'subscription' && (
             <div className="bg-gray-800 rounded-lg border border-gray-700 p-8">
-              <h2 className="text-2xl font-semibold text-white mb-2">Escolha a Data</h2>
-              <p className="text-gray-400 mb-6">Selecione o dia desejado</p>
-              <div className="grid grid-cols-7 gap-3">
-                {Array.from({ length: 14 }, (_, i) => {
-                  const date = new Date();
-                  date.setDate(date.getDate() + i);
-                  const dateStr = date.toISOString().split('T')[0];
-                  const dayName = date.toLocaleDateString('pt-BR', { weekday: 'short' });
-                  const dayNumber = date.getDate();
-
-                  return (
-                    <button
-                      key={i}
-                      onClick={() => handleDateSelect(dateStr)}
-                      className={`p-4 text-center rounded-lg border transition-all hover:scale-105 ${selectedDate === dateStr
-                        ? 'border-[#01ABFE] bg-[#01ABFE] text-white'
-                        : 'border-gray-600 bg-gray-700 hover:border-gray-500 text-white'
-                        }`}
-                    >
-                      <div className="text-xs font-medium">{dayName}</div>
-                      <div className="text-lg font-semibold">{dayNumber}</div>
-                    </button>
-                  );
-                })}
-              </div>
+              <h2 className="text-2xl font-semibold text-white mb-2">Assinaturas</h2>
+              <p className="text-gray-400">Em breve você poderá gerenciar e adquirir planos de assinatura.</p>
             </div>
+          )}
 
-            {selectedDate && (
-              <div className="bg-gray-800 rounded-lg border border-gray-700 p-8">
-                <h2 className="text-2xl font-semibold text-white mb-2">
-                  Horários Disponíveis
-                </h2>
-                <p className="text-gray-400 mb-6">
-                  {selectedDate
-                    ? `Selecione o horário para ${(() => {
-                      const parsed = new Date(selectedDate);
-                      return Number.isNaN(parsed.getTime())
-                        ? selectedDate
-                        : parsed.toLocaleDateString('pt-BR');
-                    })()}`
-                    : 'Selecione o horário'}
-                </p>
-                <div className="grid grid-cols-4 gap-3">
-                  {loadingSlots && (
-                    <div className="col-span-4 text-sm text-gray-300">Carregando horários...</div>
-                  )}
-                  {availabilityError && !loadingSlots && (
-                    <div className="col-span-4 text-sm text-red-400">{availabilityError}</div>
-                  )}
-                  {!availabilityError && !loadingSlots && availableSlots.length === 0 && (
-                    <div className="col-span-4 text-sm text-gray-300">Nenhum horário disponível para este dia.</div>
-                  )}
-                  {availableSlots.map(group => (
-                    <div key={group.employeeId || 'any'} className="bg-gray-700 rounded-lg p-4 border border-gray-600">
-                      <h3 className="text-white font-medium text-sm mb-3">
-                        {group.employeeId ? `Com ${group.employeeName}` : 'Melhor horário disponível'}
-                      </h3>
-                      <div className="grid grid-cols-2 gap-2">
-                        {group.slots.length === 0 && (
-                          <span className="col-span-2 text-xs text-gray-400">Sem horários disponíveis.</span>
-                        )}
-                        {group.slots.map((slot, index) => (
-                          <button
-                            key={`${group.employeeId || 'any'}-${index}`}
-                            onClick={() => {
-                              setSelectedTime(slot.time);
-                              if (group.employeeId) {
-                                setSelectedEmployee(employees.find(emp => emp.id === group.employeeId) || null);
-                                setEmployeePreference('specific');
-                              } else {
-                                const options = slot.employee_id
-                                  ? [slot.employee_id]
-                                  : employees.map(emp => emp.id);
-                                if (options.length > 0) {
-                                  const randomIndex = Math.floor((lastRandomSeed + index) % options.length);
-                                  const randomId = options[randomIndex];
-                                  setSelectedEmployee(employees.find(emp => emp.id === randomId) || null);
-                                }
-                                setEmployeePreference('specific');
-                              }
-                            }}
-                            className={`p-3 text-center rounded-lg border transition-all hover:scale-105 ${selectedTime === slot.time
-                              ? 'border-[#01ABFE] bg-[#01ABFE] text-white'
-                              : 'border-gray-600 bg-gray-700 hover:border-gray-500 text-white'}
-                            `}
-                          >
-                            {slot.time}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {selectedService && barberChoiceMade && employeePreference === 'any' && !selectedTime && (
-          <div className="space-y-6">
+          {activeTab === 'history' && (
             <div className="bg-gray-800 rounded-lg border border-gray-700 p-8">
-              <h2 className="text-2xl font-semibold text-white mb-2">Escolha a Data</h2>
-              <p className="text-gray-400 mb-6">Selecione o dia desejado</p>
-              <div className="grid grid-cols-7 gap-3">
-                {Array.from({ length: 14 }, (_, i) => {
-                  const date = new Date();
-                  date.setDate(date.getDate() + i);
-                  const dateStr = date.toISOString().split('T')[0];
-                  const dayName = date.toLocaleDateString('pt-BR', { weekday: 'short' });
-                  const dayNumber = date.getDate();
-
-                  return (
-                    <button
-                      key={i}
-                      onClick={() => handleDateSelect(dateStr)}
-                      className={`p-4 text-center rounded-lg border transition-all hover:scale-105 ${selectedDate === dateStr
-                        ? 'border-[#01ABFE] bg-[#01ABFE] text-white'
-                        : 'border-gray-600 bg-gray-700 hover:border-gray-500 text-white'
-                        }`}
-                    >
-                      <div className="text-xs font-medium">{dayName}</div>
-                      <div className="text-lg font-semibold">{dayNumber}</div>
-                    </button>
-                  );
-                })}
-              </div>
+              <h2 className="text-2xl font-semibold text-white mb-2">Histórico de agendamentos</h2>
+              <p className="text-gray-400">Aqui aparecerão seus agendamentos anteriores.</p>
             </div>
+          )}
 
-            {selectedDate && (
-              <div className="bg-gray-800 rounded-lg border border-gray-700 p-8">
-                <h2 className="text-2xl font-semibold text-white mb-2">
-                  Horários Disponíveis
-                </h2>
-                <p className="text-gray-400 mb-6">
-                  {selectedDate
-                    ? `Selecione o horário para ${(() => {
-                      const parsed = new Date(selectedDate);
-                      return Number.isNaN(parsed.getTime())
-                        ? selectedDate
-                        : parsed.toLocaleDateString('pt-BR');
-                    })()}`
-                    : 'Selecione o horário'}
-                </p>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {loadingSlots && (
-                    <div className="col-span-full text-sm text-gray-300">Carregando horários...</div>
-                  )}
-                  {availabilityError && !loadingSlots && (
-                    <div className="col-span-full text-sm text-red-400">{availabilityError}</div>
-                  )}
-                  {!availabilityError && !loadingSlots && availableSlots.length === 0 && (
-                    <div className="col-span-full text-sm text-gray-300">Nenhum horário disponível para este dia.</div>
-                  )}
-                  {availableSlots.map(group => (
-                    <div key={group.employeeId || 'any'} className="bg-gray-700 rounded-lg p-4 border border-gray-600">
-                      <h3 className="text-white font-medium text-sm mb-3">
-                        {group.employeeId ? `Com ${group.employeeName}` : 'Melhor horário disponível'}
-                      </h3>
-                      <div className="grid grid-cols-2 gap-2">
-                        {group.slots.length === 0 && (
-                          <span className="col-span-2 text-xs text-gray-400">Sem horários disponíveis.</span>
-                        )}
-                        {group.slots.map((slot, index) => (
-                          <button
-                            key={`${group.employeeId || 'any'}-${index}`}
-                            onClick={() => {
-                              setSelectedTime(slot.time);
-                              if (group.employeeId) {
-                                setSelectedEmployee(employees.find(emp => emp.id === group.employeeId) || null);
-                                setEmployeePreference('specific');
-                              } else {
-                                const options = slot.employee_id
-                                  ? [slot.employee_id]
-                                  : employees.map(emp => emp.id);
-                                if (options.length > 0) {
-                                  const randomId = options[Math.floor(Math.random() * options.length)];
-                                  setSelectedEmployee(employees.find(emp => emp.id === randomId) || null);
-                                }
-                                setEmployeePreference('specific');
-                              }
-                            }}
-                            className={`p-3 text-center rounded-lg border transition-all hover:scale-105 ${selectedTime === slot.time
-                              ? 'border-[#01ABFE] bg-[#01ABFE] text-white'
-                              : 'border-gray-600 bg-gray-700 hover:border-gray-500 text-white'}
-                            `}
-                          >
-                            {slot.time}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-
-
-        {/* Etapa 4: Formulário e Resumo */}
-        {selectedTime && (
-          <div className="space-y-6">
-            {/* Formulário de Cliente */}
-            <div className="bg-gray-800 rounded-lg border border-gray-700 p-8">
-              <h2 className="text-2xl font-semibold text-white mb-2">Seus Dados</h2>
-              <p className="text-gray-400 mb-6">Preencha suas informações para finalizar o agendamento</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Nome Completo *
-                  </label>
-                  <input
-                    type="text"
-                    value={clientInfo.name}
-                    onChange={(e) => handleClientInfoChange('name', e.target.value)}
-                    className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-[#01ABFE] focus:border-[#01ABFE]"
-                    placeholder="Seu nome completo"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Telefone *
-                  </label>
-                  <input
-                    type="tel"
-                    value={clientInfo.phone}
-                    onChange={(e) => handleClientInfoChange('phone', e.target.value)}
-                    className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-[#01ABFE] focus:border-[#01ABFE]"
-                    placeholder="(11) 90000-0000"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Email (opcional)
-                  </label>
-                  <input
-                    type="email"
-                    value={clientInfo.email}
-                    onChange={(e) => handleClientInfoChange('email', e.target.value)}
-                    className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-[#01ABFE] focus:border-[#01ABFE]"
-                    placeholder="seu@email.com"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Resumo do Agendamento */}
-            <div className="bg-gray-800 rounded-lg border border-gray-700 p-8">
-              <h2 className="text-2xl font-semibold text-white mb-2">Resumo do Agendamento</h2>
-              <p className="text-gray-400 mb-6">Confira os detalhes antes de confirmar</p>
-              <div className="bg-gray-700 rounded-lg p-6">
-                <div className="space-y-4 text-sm">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-300">Serviço:</span>
-                    <span className="font-medium text-white text-lg">{selectedService?.name}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-300">Profissional:</span>
-                    <span className="font-medium text-white">
-                      {employeePreference === 'any' && !selectedEmployee
-                        ? 'Sem preferência'
-                        : selectedEmployee?.name}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-300">Data:</span>
-                    <span className="font-medium text-white">
-                      {selectedDate
-                        ? (() => {
-                          const parsed = new Date(selectedDate);
-                          return Number.isNaN(parsed.getTime())
-                            ? selectedDate
-                            : parsed.toLocaleDateString('pt-BR');
-                        })()
-                        : '--/--/----'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-300">Horário:</span>
-                    <span className="font-medium text-white">{selectedTime}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-300">Duração:</span>
-                    <span className="font-medium text-white">{formatDuration(selectedService?.duration_min || 0)}</span>
-                  </div>
-                  <div className="flex justify-between items-center pt-4 border-t border-gray-600">
-                    <span className="font-semibold text-white text-lg">Total:</span>
-                    <span className="font-bold text-2xl text-[#01ABFE]">
-                      {formatPrice(selectedService?.price_cents || 0)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Botões de Navegação */}
-              <div className="flex justify-between mt-8">
-                <button
-                  onClick={() => {
-                    setSelectedTime('');
-                    setClientInfo({ name: '', phone: '', email: '' });
-                  }}
-                  className="px-6 py-3 bg-gray-600 text-white rounded-lg font-medium hover:bg-gray-500 transition-colors flex items-center"
-                >
-                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                  </svg>
-                  Voltar
-                </button>
-                <button
-                  onClick={handleBooking}
-                  disabled={isBooking || !clientInfo.name || !clientInfo.phone}
-                  className="px-8 py-3 bg-[#01ABFE] text-white rounded-lg font-medium hover:bg-[#01ABFE]/90 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors flex items-center"
-                >
-                  {isBooking ? 'Agendando...' : 'Confirmar Agendamento'}
-                  <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+          {activeTab === 'profile' && (
+            <ProfilePanel />
+          )}
+        </main>
       </div>
     </div>
   );
+}
+
+function ProfilePanel() {
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+
+  useEffect(() => {
+    let alive = true
+      ; (async () => {
+        try {
+          const res = await fetch('/api/v1/public/auth/profile', { cache: 'no-store' })
+          const data = await res.json()
+          if (!alive) return
+          if (res.ok) {
+            setName(data.client?.name ?? '')
+            setEmail(data.client?.email ?? '')
+            setPhone(data.client?.phone ?? '')
+          } else {
+            setError(data?.error || 'Falha ao carregar')
+          }
+        } finally {
+          if (alive) setLoading(false)
+        }
+      })()
+    return () => { alive = false }
+  }, [])
+
+  const saveProfile = async () => {
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/v1/public/auth/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email: email || null, phone })
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data?.error || 'Falha ao salvar')
+      }
+    } catch (e: any) {
+      setError(e?.message || 'Erro inesperado')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const changePassword = async () => {
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/v1/public/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword, newPassword })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error || 'Falha ao alterar senha')
+      setCurrentPassword('')
+      setNewPassword('')
+    } catch (e: any) {
+      setError(e?.message || 'Erro inesperado')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) return <div className="bg-gray-800 rounded-lg border border-gray-700 p-8">Carregando...</div>
+
+  return (
+    <div className="bg-gray-800 rounded-lg border border-gray-700 p-8 space-y-8">
+      <div>
+        <h2 className="text-2xl font-semibold text-white mb-2">Perfil</h2>
+        <p className="text-gray-400">Gerencie suas informações pessoais</p>
+      </div>
+
+      {error && <div className="text-red-400 text-sm">{error}</div>}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+          <label className="text-sm text-gray-300">Nome completo</label>
+          <input value={name} onChange={(e) => setName(e.target.value)} className="mt-1 w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 outline-none focus:ring-2 focus:ring-[#01ABFE]/20 focus:border-gray-500 text-white" />
+        </div>
+        <div>
+          <label className="text-sm text-gray-300">Celular</label>
+          <input value={phone} onChange={(e) => setPhone(e.target.value)} className="mt-1 w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 outline-none focus:ring-2 focus:ring-[#01ABFE]/20 focus:border-gray-500 text-white" />
+        </div>
+        <div>
+          <label className="text-sm text-gray-300">Email</label>
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="mt-1 w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 outline-none focus:ring-2 focus:ring-[#01ABFE]/20 focus:border-gray-500 text-white" />
+        </div>
+      </div>
+      <div className="flex items-center gap-3">
+        <button onClick={saveProfile} disabled={saving} className="bg-[#01ABFE] hover:bg-[#0197e4] text-white rounded px-4 py-2 font-medium disabled:opacity-60">Salvar</button>
+      </div>
+
+      <div className="border-t border-gray-700 pt-6">
+        <h3 className="text-xl font-semibold text-white mb-4">Alterar senha</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label className="text-sm text-gray-300">Senha atual</label>
+            <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} className="mt-1 w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 outline-none focus:ring-2 focus:ring-[#01ABFE]/20 focus:border-gray-500 text-white" />
+          </div>
+          <div>
+            <label className="text-sm text-gray-300">Nova senha</label>
+            <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="mt-1 w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 outline-none focus:ring-2 focus:ring-[#01ABFE]/20 focus:border-gray-500 text-white" />
+          </div>
+        </div>
+        <div className="flex items-center gap-3 mt-4">
+          <button onClick={changePassword} disabled={saving} className="bg-gray-700 hover:bg-gray-600 text-white rounded px-4 py-2 font-medium disabled:opacity-60">Atualizar senha</button>
+        </div>
+      </div>
+    </div>
+  )
 }

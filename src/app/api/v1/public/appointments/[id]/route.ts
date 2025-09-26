@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { cacheInvalidation } from '@/lib/cache/invalidation';
 
 function jsonError(code: string, message: string, status = 400, _details?: unknown) {
     return NextResponse.json({ code, message }, { status });
@@ -18,7 +19,7 @@ export async function DELETE(_req: NextRequest, ctx: { params: { id: string } })
         // busca o agendamento
         const appointment = await prisma.appointment.findFirst({
             where: { id, tenantId },
-            select: { id: true, startAt: true, status: true }
+            select: { id: true, startAt: true, status: true, barbershopId: true }
         });
 
         if (!appointment) {
@@ -38,6 +39,13 @@ export async function DELETE(_req: NextRequest, ctx: { params: { id: string } })
         await prisma.appointment.update({
             where: { id },
             data: { status: 'CANCELED' }
+        });
+
+        // Invalidar cache de disponibilidade para o dia do agendamento
+        const appointmentDate = appointment.startAt.toISOString().split('T')[0]; // YYYY-MM-DD
+        await cacheInvalidation.invalidateByOperation('appointments', tenantId, {
+            barbershopId: appointment.barbershopId,
+            day: appointmentDate
         });
 
         return NextResponse.json({ id, status: 'CANCELED' }, { status: 200 });
@@ -67,7 +75,7 @@ export async function PATCH(_req: NextRequest, ctx: { params: { id: string } }) 
         // busca o agendamento
         const appointment = await prisma.appointment.findFirst({
             where: { id, tenantId },
-            select: { id: true, startAt: true, status: true, employeeId: true }
+            select: { id: true, startAt: true, status: true, employeeId: true, barbershopId: true }
         });
 
         if (!appointment) {
@@ -106,6 +114,21 @@ export async function PATCH(_req: NextRequest, ctx: { params: { id: string } }) 
             data: { startAt: start, endAt: end },
             select: { id: true, startAt: true, endAt: true }
         });
+
+        // Invalidar cache de disponibilidade para ambos os dias (antigo e novo)
+        const oldAppointmentDate = appointment.startAt.toISOString().split('T')[0]; // YYYY-MM-DD
+        const newAppointmentDate = start.toISOString().split('T')[0]; // YYYY-MM-DD
+
+        await Promise.all([
+            cacheInvalidation.invalidateByOperation('appointments', tenantId, {
+                barbershopId: appointment.barbershopId,
+                day: oldAppointmentDate
+            }),
+            cacheInvalidation.invalidateByOperation('appointments', tenantId, {
+                barbershopId: appointment.barbershopId,
+                day: newAppointmentDate
+            })
+        ]);
 
         return NextResponse.json(updated, { status: 200 });
     } catch (err) {

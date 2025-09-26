@@ -6,6 +6,7 @@ import { validate } from '@/lib/validate';
 import { validateHeaders } from '@/lib/validation/middleware';
 import { appointmentCreate } from '@/lib/validation/schemas';
 import { prisma } from '@/lib/prisma';
+import { cacheInvalidation } from '@/lib/cache/invalidation';
 
 export const { POST, GET } = api({
     POST: async (req: NextRequest) => {
@@ -56,6 +57,34 @@ export const { POST, GET } = api({
                     clients: { select: { name: true, phone: true } },
                     employees: { select: { name: true } },
                     services: { select: { name: true, durationMin: true } }
+                }
+            });
+
+            // Invalidar cache de disponibilidade para o dia do agendamento
+            const appointmentDate = startAt.toISOString().split('T')[0]; // YYYY-MM-DD
+            await cacheInvalidation.invalidateByOperation('appointments', tenantId, {
+                barbershopId: data.barbershopId,
+                day: appointmentDate
+            });
+
+            // Notificar clientes em tempo real
+            const { notifyTenant } = await import('../realtime/route');
+            notifyTenant(tenantId, {
+                type: 'appointment_created',
+                appointment: {
+                    id: appointment.id,
+                    clientId: appointment.clientId,
+                    employeeId: appointment.employeeId,
+                    serviceId: appointment.serviceId,
+                    barbershopId: appointment.barbershopId,
+                    startAt: appointment.startAt.toISOString(),
+                    endAt: appointment.endAt.toISOString(),
+                    notes: appointment.notes,
+                    status: appointment.status,
+                    clients: appointment.clients,
+                    employees: appointment.employees,
+                    services: appointment.services,
+                    createdAt: appointment.createdAt.toISOString()
                 }
             });
 

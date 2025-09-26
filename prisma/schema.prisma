@@ -111,6 +111,7 @@ model Client {
   name         String
   phone        String
   email        String?
+  passwordHash String?
   notes        String?
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt

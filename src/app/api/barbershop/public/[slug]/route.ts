@@ -24,6 +24,8 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ slug: 
                 description: true,
                 slug: true,
                 tenantId: true,
+                logoUrl: true,
+                bannerUrl: true,
                 services: {
                     where: { isActive: true },
                     select: {
@@ -70,6 +72,8 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ slug: 
             description: barbershop.description,
             slug: barbershop.slug,
             tenantId: barbershop.tenantId,
+            logoUrl: barbershop.logoUrl ?? null,
+            bannerUrl: barbershop.bannerUrl ?? null,
             services: (barbershop.services || []).map((s) => ({
                 id: s.id,
                 name: s.name,

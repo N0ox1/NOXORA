@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import type { Prisma } from '@prisma/client';
+import { cacheInvalidation } from '@/lib/cache/invalidation';
 
 function jsonError(code: string, message: string, status = 400, details?: unknown) {
     return NextResponse.json({ code, message, details }, { status });
@@ -63,6 +64,13 @@ export async function POST(req: Request) {
                 notes: notes ?? null
             },
             select: { id: true, startAt: true, endAt: true }
+        });
+
+        // Invalidar cache de disponibilidade para o dia do agendamento
+        const appointmentDate = start.toISOString().split('T')[0]; // YYYY-MM-DD
+        await cacheInvalidation.invalidateByOperation('appointments', tenantId, {
+            barbershopId,
+            day: appointmentDate
         });
 
         return NextResponse.json({ id: appt.id, startAt: appt.startAt, endAt: appt.endAt }, { status: 201 });

@@ -6,6 +6,7 @@ import { validate } from '@/lib/validate';
 import { validateHeaders, validateParams } from '@/lib/validation/middleware';
 import { idParam, appointmentUpdate } from '@/lib/validation/schemas';
 import { prisma } from '@/lib/prisma';
+import { cacheInvalidation } from '@/lib/cache/invalidation';
 
 export const { GET, PUT, DELETE } = api({
   GET: async (req: NextRequest, context?: { params: any }) => {
@@ -92,6 +93,13 @@ export const { GET, PUT, DELETE } = api({
           employees: { select: { name: true } },
           services: { select: { name: true, durationMin: true } }
         }
+      });
+
+      // Invalidar cache de disponibilidade para o dia do agendamento
+      const appointmentDate = updatedAppointment.startAt.toISOString().split('T')[0]; // YYYY-MM-DD
+      await cacheInvalidation.invalidateByOperation('appointments', tenantId, {
+        barbershopId: updatedAppointment.barbershopId,
+        day: appointmentDate
       });
 
       return NextResponse.json({

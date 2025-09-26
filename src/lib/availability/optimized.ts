@@ -84,10 +84,10 @@ export class OptimizedAvailabilityService {
                 this.getBarbershopHours(tenantId, barbershopId, day),
             ]);
 
-            // Calcular horário de funcionamento
-            const workingHours = this.calculateWorkingHours(employeeHours, barbershopHours, day);
+        // Calcular horário de funcionamento
+        const workingHours = this.calculateWorkingHours(employeeHours, barbershopHours, day);
 
-            // Gerar slots de disponibilidade
+        // Gerar slots de disponibilidade
             const slots = this.generateAvailabilitySlots(
                 workingHours,
                 services,

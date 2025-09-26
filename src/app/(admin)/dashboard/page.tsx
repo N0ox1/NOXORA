@@ -74,6 +74,7 @@ export default function AdminDashboard() {
   const [days, setDays] = useState<number>(7);
   const [filterEmp, setFilterEmp] = useState<string>('all');
   const [filterSvc, setFilterSvc] = useState<string>('all');
+  const [agendaHeight, setAgendaHeight] = useState<number>(900);
 
   // Função para formatar horário HH:mm
   const formatTime = (h: string | number, m: string | number): string => {
@@ -339,6 +340,67 @@ export default function AdminDashboard() {
       });
     }
   }, [userInfo]);
+
+  // Atualização em tempo real via Server-Sent Events
+  useEffect(() => {
+    if (!userInfo) return;
+
+    let eventSource: EventSource | null = null;
+    let reconnectTimeout: NodeJS.Timeout | null = null;
+
+    const connect = () => {
+      if (eventSource) {
+        eventSource.close();
+      }
+
+      eventSource = new EventSource(`/api/v1/realtime?tenantId=${userInfo.tenantId}`);
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+
+          if (data.type === 'appointment_created') {
+            // Apenas recarregar agendamentos silenciosamente
+            loadAppointments();
+          }
+        } catch (error) {
+          console.error('Erro ao processar evento em tempo real:', error);
+        }
+      };
+
+      eventSource.onerror = (error) => {
+        console.error('Erro na conexão em tempo real:', error);
+        eventSource?.close();
+
+        // Reconectar após 10 segundos apenas se não estiver fechando
+        if (!reconnectTimeout) {
+          reconnectTimeout = setTimeout(() => {
+            reconnectTimeout = null;
+            connect();
+          }, 10000);
+        }
+      };
+
+      eventSource.onopen = () => {
+        if (reconnectTimeout) {
+          clearTimeout(reconnectTimeout);
+          reconnectTimeout = null;
+        }
+      };
+    };
+
+    connect();
+
+    return () => {
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+      }
+      if (eventSource) {
+        eventSource.close();
+      }
+    };
+  }, [userInfo]);
+
 
   // Funções para gerenciar assinaturas
   const loadSubscriptions = async () => {
@@ -1587,10 +1649,10 @@ export default function AdminDashboard() {
       <div className="flex-1 flex flex-col">
         {/* Header do Conteúdo */}
         <div className="bg-slate-800/80 backdrop-blur-sm shadow-lg border-b border-slate-700/50">
-          <div className="px-8 py-6">
+          <div className="px-8 py-4">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-3xl font-bold text-white">
+                <h2 className="text-2xl font-bold text-white">
                   {activeTab === 'services' && 'Serviços'}
                   {activeTab === 'employees' && 'Funcionários'}
                   {activeTab === 'agenda' && 'Agenda'}
@@ -1599,7 +1661,7 @@ export default function AdminDashboard() {
                   {activeTab === 'configurations' && 'Configurações'}
                   {activeTab === 'plan' && 'Meu Plano'}
                 </h2>
-                <p className="text-slate-400 mt-1">
+                <p className="text-slate-400 mt-0.5 text-sm">
                   {activeTab === 'services' && 'Gerencie os serviços oferecidos pela sua barbearia'}
                   {activeTab === 'employees' && 'Administre sua equipe de funcionários'}
                   {activeTab === 'agenda' && 'Visualize e gerencie os agendamentos'}
@@ -1797,11 +1859,11 @@ export default function AdminDashboard() {
             )}
 
             {activeTab === 'agenda' && (
-              <div className="flex h-full w-full">
+              <div className="flex h-full w-full -mt-4">
                 {/* Sidebar com Calendário e Filtros */}
                 <div className="w-80 bg-black border-r border-gray-800 p-4 space-y-4">
                   {/* Calendário */}
-                  <div className="bg-white rounded-lg p-3 border border-gray-200">
+                  <div className="bg-white rounded-lg p-3 border border-gray-200 -ml-6">
                     <div className="text-center mb-3">
                       <h3 className="text-base font-semibold text-black">
                         setembro de 2025
@@ -1851,7 +1913,7 @@ export default function AdminDashboard() {
                   </div>
 
                   {/* Filtros */}
-                  <div className="space-y-3">
+                  <div className="space-y-3 -ml-6">
                     <div className="flex items-center space-x-2 text-white">
                       <CogIcon className="w-5 h-5" />
                       <span className="font-medium">Buscar e Agendar</span>
@@ -1918,30 +1980,30 @@ export default function AdminDashboard() {
                   {/* Header da Agenda */}
                   <div className="bg-slate-800 border-b border-slate-700 p-6">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-4">
-                        <div className="text-center">
-                          <h2 className="text-lg font-bold text-white">
-                            {(() => {
-                              const [year, month, day] = selectedDate.split('-');
-                              const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-                              return `${date.getDate()} ${date.toLocaleDateString('pt-BR', { month: 'short' })} ${date.getFullYear()}`;
-                            })()}
-                          </h2>
-                          <p className="text-sm text-slate-400">
-                            {(() => {
-                              const [year, month, day] = selectedDate.split('-');
-                              const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-                              return date.toLocaleDateString('pt-BR', { weekday: 'long' });
-                            })()}
-                          </p>
+                      <div className="text-center">
+                        <h2 className="text-lg font-bold text-white">
                           {(() => {
-                            const { isClosed } = getOperatingHours();
-                            if (isClosed) {
-                              return <p className="text-xs text-red-400 mt-1">🔒 Fechado</p>;
-                            }
-                            return null;
+                            const [year, month, day] = selectedDate.split('-');
+                            const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+                            return `${date.getDate()} ${date.toLocaleDateString('pt-BR', { month: 'short' })} ${date.getFullYear()}`;
                           })()}
-                        </div>
+                        </h2>
+                        <p className="text-sm text-slate-400">
+                          {(() => {
+                            const [year, month, day] = selectedDate.split('-');
+                            const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+                            return date.toLocaleDateString('pt-BR', { weekday: 'long' });
+                          })()}
+                        </p>
+                        {(() => {
+                          const { isClosed } = getOperatingHours();
+                          if (isClosed) {
+                            return <p className="text-xs text-red-400 mt-1">🔒 Fechado</p>;
+                          }
+                          return null;
+                        })()}
+                      </div>
+                      <div className="flex-1 flex justify-center">
                         <div className="relative">
                           <input
                             type="text"
@@ -1952,6 +2014,10 @@ export default function AdminDashboard() {
                         </div>
                       </div>
                       <div className="flex items-center space-x-3">
+                        <div className="flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium bg-green-600 text-white">
+                          <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
+                          <span>Tempo Real</span>
+                        </div>
                         <button
                           onClick={refreshAgenda}
                           disabled={isLoadingData}
@@ -1974,104 +2040,138 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
-                  {/* Cabeçalho dos Profissionais */}
-                  <div className="bg-gray-900 border-b border-gray-800">
-                    <div className="flex">
-                      <div className="w-20 bg-gray-900 border-r border-gray-800 p-3">
-                        <div className="text-xs text-gray-400 text-center">Profissional</div>
-                      </div>
-                      <div className="flex-1 bg-gray-900 p-3">
-                        <div className="flex items-center">
-                          <span className="text-white font-medium">vitor</span>
+                  {/* Cabeçalho dos Profissionais (colunas com rolagem horizontal) */}
+                  <div className="bg-gray-900 border-b border-gray-800 overflow-x-auto">
+                    {(() => {
+                      const barbers = (employees || []).filter(e => e.role === 'BARBER' && e.active);
+                      const getColW = (n: number) => (n <= 6 ? 220 : n <= 10 ? 180 : n <= 14 ? 150 : n <= 20 ? 120 : 100);
+                      const COL_W = getColW(barbers.length);
+                      if (barbers.length === 0) {
+                        return (
+                          <div className="flex">
+                            <div className="w-20 bg-gray-900 border-r border-gray-800 p-2">
+                              <div className="text-xs text-gray-400 text-center">Profissional</div>
+                            </div>
+                            <div className="flex-1 p-2">
+                              <span className="text-slate-400 text-sm">Nenhum barbeiro ativo</span>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div
+                          className="grid"
+                          style={{ gridTemplateColumns: `80px repeat(${barbers.length}, ${COL_W}px)` }}
+                        >
+                          <div className="bg-gray-900 border-r border-gray-800 p-2 text-xs text-gray-400 text-center">Profissional</div>
+                          {barbers.map(emp => (
+                            <div key={emp.id} className="p-2 text-white font-medium text-xs text-center border-r border-gray-800 truncate">
+                              {emp.name}
+                            </div>
+                          ))}
                         </div>
-                      </div>
-                    </div>
+                      );
+                    })()}
                   </div>
 
-                  {/* Grade da Agenda */}
-                  <div className="flex" style={{ height: '600px' }}>
-                    {/* Coluna de Horários */}
-                    <div className="w-20 bg-slate-800 border-r border-slate-700">
-                      {(() => {
-                        const { startHour, endHour, isClosed } = getOperatingHours();
+                  {/* Grade da Agenda com rolagem horizontal e múltiplas colunas */}
+                  <div className="overflow-x-auto">
+                    {(() => {
+                      const { startHour, endHour, isClosed } = getOperatingHours();
+                      if (isClosed) {
+                        return (
+                          <div className="h-16 border-b border-slate-700 border-dashed relative flex items-center justify-center">
+                            <span className="text-slate-500 text-sm">Estabelecimento fechado</span>
+                          </div>
+                        );
+                      }
 
-                        if (isClosed) {
-                          return (
-                            <div className="h-16 flex items-center justify-center text-sm text-slate-500">
-                              Fechado
+                      const barbers = (employees || []).filter(e => e.role === 'BARBER' && e.active);
+                      const getColW = (n: number) => (n <= 6 ? 220 : n <= 10 ? 180 : n <= 14 ? 150 : n <= 20 ? 120 : 100);
+                      const COL_W = getColW(barbers.length);
+                      const totalHours = endHour - startHour + 1;
+                      // Altura fixa da agenda (se ajusta ao viewport, mas é fixa por dia)
+                      const DEFAULT_HEIGHT = 880; // altura base
+                      const heightFromViewport = typeof window !== 'undefined'
+                        ? Math.max(730, Math.min(1030, window.innerHeight - 170))
+                        : DEFAULT_HEIGHT;
+                      const containerHeight = heightFromViewport;
+                      const slotHeight = `${containerHeight / totalHours}px`;
+
+                      const sameDay = (iso: string) => {
+                        const d = new Date(iso);
+                        const yyyy = d.getFullYear();
+                        const mm = String(d.getMonth() + 1).padStart(2, '0');
+                        const dd = String(d.getDate()).padStart(2, '0');
+                        return `${yyyy}-${mm}-${dd}` === selectedDate;
+                      };
+
+                      return (
+                        <div
+                          className="grid relative"
+                          style={{ gridTemplateColumns: `80px repeat(${barbers.length}, ${COL_W}px)`, height: `${containerHeight}px` }}
+                        >
+                          {/* Coluna fixa de horários */}
+                          <div className="bg-slate-800 border-r border-slate-700">
+                            {Array.from({ length: totalHours }).map((_, idx) => {
+                              const hour = startHour + idx;
+                              const isSpecial = hour === startHour || hour === endHour;
+                              return (
+                                <div
+                                  key={hour}
+                                  className={`border-b border-slate-700 flex items-start justify-center text-xs pt-1 ${isSpecial ? 'bg-[#01ABFE]/20 text-[#01ABFE]' : 'text-slate-400'}`}
+                                  style={{ height: slotHeight }}
+                                >
+                                  {hour}h
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {/* Colunas de agenda por barbeiro */}
+                          {barbers.map(emp => (
+                            <div key={emp.id} className="relative border-r border-slate-700">
+                              {/* Linhas de hora no fundo de cada coluna */}
+                              {Array.from({ length: totalHours }).map((_, idx) => {
+                                const hour = startHour + idx;
+                                const isLastHour = hour === endHour;
+                                return (
+                                  <div key={hour} className="relative" style={{ height: slotHeight }}>
+                                    <div className="absolute top-0 left-0 right-0 h-px bg-gray-700"></div>
+                                    <div className="absolute top-1/2 left-0 right-0 h-px bg-gray-700 border-dashed border-t"></div>
+                                    {!isLastHour && <div className="absolute bottom-0 left-0 right-0 h-px bg-gray-700"></div>}
+                                  </div>
+                                );
+                              })}
+
+                              {/* Agendamentos deste barbeiro */}
+                              {(appointments || [])
+                                .filter(a => a.status === 'CONFIRMED' && a.employeeId === emp.id && sameDay(a.startAt))
+                                .map(appt => {
+                                  const start = new Date(appt.startAt);
+                                  const end = new Date(appt.endAt);
+                                  const startHoursFromOpen = (start.getHours() + start.getMinutes() / 60) - startHour;
+                                  const durationHours = Math.max(0.25, (end.getTime() - start.getTime()) / 3600000);
+                                  const top = Math.max(0, (startHoursFromOpen / totalHours) * containerHeight);
+                                  const height = Math.max(22, (durationHours / totalHours) * containerHeight);
+                                  return (
+                                    <div
+                                      key={appt.id}
+                                      className="absolute left-1 right-1 rounded border border-sky-700 bg-sky-600/30 text-sky-100 px-1 py-0.5 overflow-hidden"
+                                      style={{ top: `${top}px`, height: `${height}px` }}
+                                      title={`${emp.name || ''} • ${appt.service?.name || ''}`}
+                                    >
+                                      <div className="text-[11px] font-medium leading-4 truncate">{appt.service?.name || 'Serviço'}</div>
+                                      <div className="text-[10px] opacity-80 leading-4 truncate">{(appt.clients?.name ? appt.clients.name + ' • ' : '') + (start.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }))}</div>
+                                    </div>
+                                  );
+                                })}
                             </div>
-                          );
-                        }
-
-                        const hours = [];
-                        const totalHours = endHour - startHour + 1;
-                        const slotHeight = `calc(600px / ${totalHours})`; // Altura fixa de 600px dividida pelas horas
-
-                        for (let hour = startHour; hour <= endHour; hour++) {
-                          const isSpecial = hour === startHour || hour === endHour;
-                          hours.push(
-                            <div
-                              key={hour}
-                              className={`border-b border-slate-700 flex items-start justify-center text-xs pt-1 ${isSpecial
-                                ? 'bg-[#01ABFE]/20 text-[#01ABFE]'
-                                : 'text-slate-400'
-                                }`}
-                              style={{ height: slotHeight }}
-                            >
-                              {hour}h
-                            </div>
-                          );
-                        }
-                        return hours;
-                      })()}
-                    </div>
-
-                    {/* Coluna de Agendamentos */}
-                    <div className="flex-1 relative">
-
-                      {/* Grade de horários */}
-                      {(() => {
-                        const { startHour, endHour, isClosed } = getOperatingHours();
-
-                        if (isClosed) {
-                          return (
-                            <div className="h-16 border-b border-slate-700 border-dashed relative flex items-center justify-center">
-                              <span className="text-slate-500 text-sm">Estabelecimento fechado</span>
-                            </div>
-                          );
-                        }
-
-                        const timeSlots = [];
-                        const totalHours = endHour - startHour + 1;
-                        const slotHeight = `calc(600px / ${totalHours})`; // Altura fixa de 600px dividida pelas horas
-
-                        for (let hour = startHour; hour <= endHour; hour++) {
-                          const isLastHour = hour === endHour;
-                          timeSlots.push(
-                            <div
-                              key={hour}
-                              className="relative"
-                              style={{ height: slotHeight }}
-                            >
-                              {/* Linha sólida na parte superior (divisão entre horários) */}
-                              <div className="absolute top-0 left-0 right-0 h-px bg-gray-700"></div>
-
-                              {/* Linha pontilhada no meio da hora (9:30) */}
-                              <div className="absolute top-1/2 left-0 right-0 h-px bg-gray-700 border-dashed border-t"></div>
-
-                              {/* Linha sólida na parte inferior (exceto na última hora) */}
-                              {!isLastHour && (
-                                <div className="absolute bottom-0 left-0 right-0 h-px bg-gray-700"></div>
-                              )}
-
-                              {/* Aqui ficariam os agendamentos */}
-                            </div>
-                          );
-                        }
-                        return timeSlots;
-                      })()}
-
-                    </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
