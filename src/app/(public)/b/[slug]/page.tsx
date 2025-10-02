@@ -77,6 +77,55 @@ export async function NoxoraPublicServices({ slug }: { slug: string }) {
   );
 }
 
+// Componente para geração de datas que evita problemas de hidratação
+function DateGrid({ selectedDate, onDateSelect }: { selectedDate: string; onDateSelect: (date: string) => void }) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return (
+      <div className="grid grid-cols-7 gap-3">
+        {Array.from({ length: 14 }, (_, i) => (
+          <div key={i} className="p-4 text-center rounded-lg border border-gray-600 bg-gray-700 animate-pulse">
+            <div className="h-4 bg-gray-600 rounded mb-2"></div>
+            <div className="h-6 bg-gray-600 rounded"></div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-7 gap-3">
+      {Array.from({ length: 14 }, (_, i) => {
+        // Criar data em UTC para evitar problemas de timezone
+        const today = new Date();
+        const date = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate() + i));
+        const dateStr = date.toISOString().split('T')[0];
+        const dayName = date.toLocaleDateString('pt-BR', { weekday: 'short', timeZone: 'UTC' });
+        const dayNumber = date.getUTCDate();
+
+        return (
+          <button
+            key={i}
+            onClick={() => onDateSelect(dateStr)}
+            className={`p-4 text-center rounded-lg border transition-all hover:scale-105 ${selectedDate === dateStr
+              ? 'border-[#01ABFE] bg-[#01ABFE] text-white'
+              : 'border-gray-600 bg-gray-700 hover:border-gray-500 text-white'
+              }`}
+          >
+            <div className="text-xs font-medium">{dayName}</div>
+            <div className="text-lg font-semibold">{dayNumber}</div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function BarbershopPage() {
   const params = useParams();
   const slug = params.slug as string;
@@ -119,7 +168,7 @@ export default function BarbershopPage() {
   const [selectedTime, setSelectedTime] = useState<string>('');
   const [availableSlots, setAvailableSlots] = useState<AvailabilityGroup[]>([]);
   const [availabilityError, setAvailabilityError] = useState<string | null>(null);
-  const [lastRandomSeed, setLastRandomSeed] = useState<number>(Date.now());
+  const [lastRandomSeed, setLastRandomSeed] = useState<number>(0);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [clientInfo, setClientInfo] = useState({
     name: '',
@@ -296,16 +345,18 @@ export default function BarbershopPage() {
           }
         }
 
-        setAvailableSlots(groups);
-        setAvailabilityError(null);
-        setLastRandomSeed(Date.now());
+        if (alive) {
+          setAvailableSlots(groups);
+          setAvailabilityError(null);
+          setLastRandomSeed(Math.floor(Math.random() * 1000000));
+        }
       } catch (error) {
         if (!alive) return;
         console.error('Erro inesperado ao buscar disponibilidade:', error);
         setAvailableSlots([]);
         setAvailabilityError('Não foi possível carregar os horários disponíveis. Verifique sua conexão e tente novamente.');
       } finally {
-        if (alive) setLoadingSlots(false);
+        setLoadingSlots(false);
       }
     })();
 
@@ -650,29 +701,7 @@ export default function BarbershopPage() {
                   <div className="bg-gray-800 rounded-lg border border-gray-700 p-8">
                     <h2 className="text-2xl font-semibold text-white mb-2">Escolha a Data</h2>
                     <p className="text-gray-400 mb-6">Selecione o dia desejado</p>
-                    <div className="grid grid-cols-7 gap-3">
-                      {Array.from({ length: 14 }, (_, i) => {
-                        const date = new Date();
-                        date.setDate(date.getDate() + i);
-                        const dateStr = date.toISOString().split('T')[0];
-                        const dayName = date.toLocaleDateString('pt-BR', { weekday: 'short' });
-                        const dayNumber = date.getDate();
-
-                        return (
-                          <button
-                            key={i}
-                            onClick={() => handleDateSelect(dateStr)}
-                            className={`p-4 text-center rounded-lg border transition-all hover:scale-105 ${selectedDate === dateStr
-                              ? 'border-[#01ABFE] bg-[#01ABFE] text-white'
-                              : 'border-gray-600 bg-gray-700 hover:border-gray-500 text-white'
-                              }`}
-                          >
-                            <div className="text-xs font-medium">{dayName}</div>
-                            <div className="text-lg font-semibold">{dayNumber}</div>
-                          </button>
-                        );
-                      })}
-                    </div>
+                    <DateGrid selectedDate={selectedDate} onDateSelect={handleDateSelect} />
                   </div>
 
                   {selectedDate && (
@@ -683,10 +712,10 @@ export default function BarbershopPage() {
                       <p className="text-gray-400 mb-6">
                         {selectedDate
                           ? `Selecione o horário para ${(() => {
-                            const parsed = new Date(selectedDate);
+                            const parsed = new Date(selectedDate + 'T00:00:00Z');
                             return Number.isNaN(parsed.getTime())
                               ? selectedDate
-                              : parsed.toLocaleDateString('pt-BR');
+                              : parsed.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
                           })()}`
                           : 'Selecione o horário'}
                       </p>
@@ -751,29 +780,7 @@ export default function BarbershopPage() {
                   <div className="bg-gray-800 rounded-lg border border-gray-700 p-8">
                     <h2 className="text-2xl font-semibold text-white mb-2">Escolha a Data</h2>
                     <p className="text-gray-400 mb-6">Selecione o dia desejado</p>
-                    <div className="grid grid-cols-7 gap-3">
-                      {Array.from({ length: 14 }, (_, i) => {
-                        const date = new Date();
-                        date.setDate(date.getDate() + i);
-                        const dateStr = date.toISOString().split('T')[0];
-                        const dayName = date.toLocaleDateString('pt-BR', { weekday: 'short' });
-                        const dayNumber = date.getDate();
-
-                        return (
-                          <button
-                            key={i}
-                            onClick={() => handleDateSelect(dateStr)}
-                            className={`p-4 text-center rounded-lg border transition-all hover:scale-105 ${selectedDate === dateStr
-                              ? 'border-[#01ABFE] bg-[#01ABFE] text-white'
-                              : 'border-gray-600 bg-gray-700 hover:border-gray-500 text-white'
-                              }`}
-                          >
-                            <div className="text-xs font-medium">{dayName}</div>
-                            <div className="text-lg font-semibold">{dayNumber}</div>
-                          </button>
-                        );
-                      })}
-                    </div>
+                    <DateGrid selectedDate={selectedDate} onDateSelect={handleDateSelect} />
                   </div>
 
                   {selectedDate && (
@@ -784,10 +791,10 @@ export default function BarbershopPage() {
                       <p className="text-gray-400 mb-6">
                         {selectedDate
                           ? `Selecione o horário para ${(() => {
-                            const parsed = new Date(selectedDate);
+                            const parsed = new Date(selectedDate + 'T00:00:00Z');
                             return Number.isNaN(parsed.getTime())
                               ? selectedDate
-                              : parsed.toLocaleDateString('pt-BR');
+                              : parsed.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
                           })()}`
                           : 'Selecione o horário'}
                       </p>

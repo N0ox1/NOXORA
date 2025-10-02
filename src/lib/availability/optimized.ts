@@ -84,10 +84,10 @@ export class OptimizedAvailabilityService {
                 this.getBarbershopHours(tenantId, barbershopId, day),
             ]);
 
-        // Calcular horário de funcionamento
-        const workingHours = this.calculateWorkingHours(employeeHours, barbershopHours, day);
+            // Calcular horário de funcionamento
+            const workingHours = this.calculateWorkingHours(employeeHours, barbershopHours, day);
 
-        // Gerar slots de disponibilidade
+            // Gerar slots de disponibilidade
             const slots = this.generateAvailabilitySlots(
                 workingHours,
                 services,
@@ -186,18 +186,12 @@ export class OptimizedAvailabilityService {
 
     // Obter horários da barbearia com cache
     private async getBarbershopHours(tenantId: string, barbershopId: string, day: string) {
-        const barbershop = await cacheService.getWithLock(
-            CACHE_KEYS.publicShop(tenantId, barbershopId),
-            {},
-            async () => {
-                return readWithRetry(async () => {
-                    return prisma.barbershop.findUnique({
-                        where: { id: barbershopId },
-                        select: { workingHours: true },
-                    });
-                }, 'getBarbershopHours');
-            }
-        );
+        const barbershop = await readWithRetry(async () => {
+            return prisma.barbershop.findUnique({
+                where: { id: barbershopId },
+                select: { workingHours: true },
+            });
+        }, 'getBarbershopHours');
 
         if (!barbershop) {
             return null;
@@ -208,39 +202,48 @@ export class OptimizedAvailabilityService {
             return null;
         }
 
-        // Normalizar diferentes formatos de workingHours armazenados
-        // Formato 1 (comum): [{ weekday: 1-7|0-6, open: '09:00', close: '21:00', is_closed: false }]
-        // Formato 2 (legado): [{ weekday: 0-6, open_time: '09:00', close_time: '21:00', is_closed: false }]
         try {
-            const dayOfWeek = new Date(day).getDay(); // 0=Domingo
-            const list = Array.isArray(workingHours) ? workingHours : [];
+            // Corrigir interpretação da data para evitar problemas de fuso horário
+            // Usar UTC para evitar problemas de fuso horário
+            const [year, month, dayNum] = day.split('-').map(Number);
+            const date = new Date(Date.UTC(year, month - 1, dayNum));
+            const dayOfWeek = date.getUTCDay(); // 0=Domingo
 
-            // Tentar casar por 'weekday' com 0-6
-            let dayHours: any = list.find((dh: any) => dh.weekday === dayOfWeek);
-            // Alternativa: alguns salvam 1-7, onde 1=Domingo ou 1=Segunda. Tentar 1-7 (Domingo=1)
-            if (!dayHours) {
-                const altKey = ((dayOfWeek + 1) % 7) + 1; // 0->1, 1->2, ... 6->7
-                dayHours = list.find((dh: any) => dh.weekday === altKey);
+            let dayHours: any = null;
+
+            // Formato objeto: { monday: { open: '09:00', close: '18:00', closed: false }, ... }
+            if (typeof workingHours === 'object' && !Array.isArray(workingHours)) {
+                const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+                const dayName = dayNames[dayOfWeek];
+                dayHours = workingHours[dayName];
+            }
+            // Formato array: [{ weekday: 0-6, open: '09:00', close: '21:00', is_closed: false }]
+            else if (Array.isArray(workingHours)) {
+                dayHours = workingHours.find((dh: any) => dh.weekday === dayOfWeek);
+                if (!dayHours) {
+                    const altKey = ((dayOfWeek + 1) % 7) + 1;
+                    dayHours = workingHours.find((dh: any) => dh.weekday === altKey);
+                }
             }
 
             if (!dayHours) {
                 return null;
             }
 
-            const open = typeof dayHours.open === 'string' ? dayHours.open
-                : typeof dayHours.open_time === 'string' ? dayHours.open_time
-                    : null;
-            const close = typeof dayHours.close === 'string' ? dayHours.close
-                : typeof dayHours.close_time === 'string' ? dayHours.close_time
-                    : null;
-            const closed = !!dayHours.is_closed;
+            const open = dayHours.open || dayHours.open_time;
+            const close = dayHours.close || dayHours.close_time;
+            const closed = !!dayHours.closed || !!dayHours.is_closed;
+
 
             if (!open || !close) {
+                console.log(`[getBarbershopHours] ${day} - Invalid times, returning null`);
                 return null;
             }
 
+            console.log(`[getBarbershopHours] ${day} - Returning:`, { open, close, closed });
             return { open, close, closed };
-        } catch {
+        } catch (error) {
+            console.error('[getBarbershopHours] Error:', error);
             return null;
         }
     }
@@ -265,7 +268,7 @@ export class OptimizedAvailabilityService {
         if (employeeHours && employeeHours.length > 0) {
             const hours = employeeHours[0];
             const { openHour, openMinute, closeMinute, startMinutes, endMinutes } = parseRange(hours.start_time, hours.end_time);
-            return {
+            const result = {
                 startHour: openHour,
                 endHour: Math.ceil(endMinutes / 60),
                 startMinute: openMinute,
@@ -274,11 +277,12 @@ export class OptimizedAvailabilityService {
                 endMinutes,
                 isClosed: false,
             };
+            return result;
         }
 
         if (barbershopHours && !barbershopHours.closed) {
             const { openHour, openMinute, closeMinute, startMinutes, endMinutes } = parseRange(barbershopHours.open, barbershopHours.close);
-            return {
+            const result = {
                 startHour: openHour,
                 endHour: Math.ceil(endMinutes / 60),
                 startMinute: openMinute,
@@ -287,8 +291,20 @@ export class OptimizedAvailabilityService {
                 endMinutes,
                 isClosed: false,
             };
+            return result;
         }
 
+        if (barbershopHours && barbershopHours.closed) {
+            return {
+                startHour: 0,
+                endHour: 0,
+                startMinute: 0,
+                endMinute: 0,
+                startMinutes: 0,
+                endMinutes: 0,
+                isClosed: true,
+            };
+        }
         return {
             startHour: 8,
             endHour: 18,
@@ -315,12 +331,12 @@ export class OptimizedAvailabilityService {
             ? Math.min(...services.map(s => s.durationMin))
             : AVAILABILITY_CONFIG.MIN_SLOT_DURATION_MINUTES;
 
-        // Base do dia (00:00 local) e aplicar minutos de funcionamento
-        const dayBase = new Date(day + 'T00:00:00');
+        // Base do dia (00:00 UTC) e aplicar minutos de funcionamento
+        const dayBase = new Date(day + 'T00:00:00.000Z');
         const current = new Date(dayBase);
-        current.setMinutes(workingHours.startMinutes);
+        current.setUTCMinutes(workingHours.startMinutes);
         const end = new Date(dayBase);
-        end.setMinutes(workingHours.endMinutes);
+        end.setUTCMinutes(workingHours.endMinutes);
 
         while (current < end) {
             const slotStart = new Date(current);

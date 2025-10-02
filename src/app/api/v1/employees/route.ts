@@ -87,6 +87,52 @@ export const { GET, POST } = api({
                     if (existingEmployee) return NextResponse.json({ code: 'conflict', message: 'Email já em uso neste tenant' }, { status: 409 });
                 }
 
+                // Validação 3: Limite de barbeiros por plano e trial
+                if (data.role === 'BARBER') {
+                    // Buscar tenant para verificar plano e status
+                    const tenant = await prisma.tenant.findUnique({
+                        where: { id: tenantId! },
+                        select: { plan: true, status: true, createdAt: true }
+                    });
+
+                    if (!tenant) {
+                        return NextResponse.json({ code: 'tenant_not_found', message: 'Tenant não encontrado' }, { status: 404 });
+                    }
+
+                    // Carregar configuração de billing (trial)
+                    const billing = await import('../../../../../config/billing.json');
+                    const trialDays = (billing as any).default?.trial_days ?? (billing as any).trial_days ?? 5;
+
+                    const now = new Date();
+                    const createdAt = new Date(tenant.createdAt);
+                    const daysElapsed = Math.floor((now.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
+                    const isTrialActive = tenant.status === 'TRIALING' || daysElapsed < trialDays;
+
+                    const planBarberLimits: Record<string, number> = {
+                        STARTER: 3, // plano simples 1-3 barbeiros
+                        PRO: 8,     // plano intermediário 1-8 barbeiros
+                        SCALE: 15   // plano premium até 15 barbeiros
+                    };
+
+                    const allowedBarbers = isTrialActive ? 15 : (planBarberLimits as any)[tenant.plan] ?? 3;
+
+                    const currentBarbers = await prisma.employee.count({
+                        where: {
+                            tenantId,
+                            barbershopId: data.barbershopId,
+                            role: 'BARBER',
+                            active: true
+                        }
+                    });
+
+                    if (currentBarbers >= allowedBarbers) {
+                        const message = isTrialActive
+                            ? 'Limite máximo de barbeiros no período de teste atingido (15)'
+                            : `Seu plano atual permite até ${allowedBarbers} barbeiros. Faça upgrade para adicionar mais.`;
+                        return NextResponse.json({ code: 'limit_exceeded', message }, { status: 400 });
+                    }
+                }
+
                 // Criar employee real
                 const created = await prisma.employee.create({
                     data: {

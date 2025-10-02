@@ -27,6 +27,7 @@ model Tenant {
   services     Service[]
   subscriptions Subscription[]
   clientSubscriptions ClientSubscription[]
+  customerTenants CustomerTenant[]
 
   @@map("tenants")
 }
@@ -123,12 +124,51 @@ model Client {
   @@map("clients")
 }
 
+// Global Customer model - unique identity across all tenants
+model Customer {
+  id           String            @id @default(cuid())
+  email        String            @unique
+  phone        String?
+  passwordHash String
+  name         String
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  
+  // Relations
+  customerTenants CustomerTenant[]
+  appointments    Appointment[]
+
+  @@index([email])
+  @@index([phone])
+  @@map("customers")
+}
+
+// Customer-Tenant relationship (many-to-many)
+model CustomerTenant {
+  id         String   @id @default(cuid())
+  customerId String
+  tenantId   String
+  status     String   @default("active") // active, banned, pending
+  roles      String[] @default(["client"])
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  
+  // Relations
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([customerId, tenantId])
+  @@index([tenantId])
+  @@map("customer_tenants")
+}
+
 model Appointment {
   id           String            @id @default(cuid())
   tenantId     String
   barbershopId String
   employeeId   String
-  clientId     String
+  clientId     String?           // Legacy field - will be deprecated
+  customerId   String?           // New field - references Customer
   serviceId    String
   startAt      DateTime
   endAt        DateTime
@@ -137,7 +177,8 @@ model Appointment {
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
   barbershops  Barbershop        @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
-  clients      Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clients      Client?           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  customer     Customer?         @relation(fields: [customerId], references: [id], onDelete: Cascade)
   employees    Employee          @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   services     Service           @relation(fields: [serviceId], references: [id], onDelete: Cascade)
   tenants      Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -145,6 +186,7 @@ model Appointment {
   @@index([tenantId, barbershopId])
   @@index([tenantId, barbershopId, startAt])
   @@index([tenantId])
+  @@index([customerId])
   @@map("appointments")
 }
 

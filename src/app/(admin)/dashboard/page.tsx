@@ -198,8 +198,51 @@ export default function AdminDashboard() {
   const [lastEdited, setLastEdited] = useState<{ day: string; field: 'open' | 'close' } | null>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const bannerInputRef = useRef<HTMLInputElement>(null);
-  const [userInfo, setUserInfo] = useState<{ tenantId: string; barbershopId: string } | null>(null);
+  const [userInfo, setUserInfo] = useState<{
+    tenantId: string;
+    barbershopId: string;
+    tenantPlan?: 'STARTER' | 'PRO' | 'SCALE';
+    tenantStatus?: 'ACTIVE' | 'PAST_DUE' | 'CANCELED' | 'TRIALING';
+    tenantCreatedAt?: string;
+  } | null>(null);
+  const [trialTimeLeft, setTrialTimeLeft] = useState<{ days: number; hours: number; expired: boolean } | null>(null);
   const [isLoadingData, setIsLoadingData] = useState(false);
+
+  // Função para calcular tempo restante do trial
+  const calculateTrialTimeLeft = (createdAt: string) => {
+    const trialDays = 5;
+    const createdAtDate = new Date(createdAt);
+    const now = new Date();
+    const trialEndTime = new Date(createdAtDate.getTime() + (trialDays * 24 * 60 * 60 * 1000));
+    const timeLeft = trialEndTime.getTime() - now.getTime();
+
+    if (timeLeft <= 0) {
+      return { days: 0, hours: 0, expired: true };
+    }
+
+    const days = Math.floor(timeLeft / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((timeLeft % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+
+    return { days, hours, expired: false };
+  };
+
+  // useEffect para atualizar contagem regressiva em tempo real
+  useEffect(() => {
+    if (!userInfo?.tenantCreatedAt) return;
+
+    const updateTrialTime = () => {
+      const timeLeft = calculateTrialTimeLeft(userInfo.tenantCreatedAt!);
+      setTrialTimeLeft(timeLeft);
+    };
+
+    // Atualizar imediatamente
+    updateTrialTime();
+
+    // Atualizar a cada minuto
+    const interval = setInterval(updateTrialTime, 60000);
+
+    return () => clearInterval(interval);
+  }, [userInfo?.tenantCreatedAt]);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
 
   // Estados para assinaturas
@@ -330,7 +373,8 @@ export default function AdminDashboard() {
         loadEmployees(),
         loadAppointments(),
         loadClients(),
-        loadConfigurations()
+        loadConfigurations(),
+        loadSubscriptions()
       ]).then(() => {
         setIsLoadingData(false);
         setLastUpdate(new Date());
@@ -497,6 +541,29 @@ export default function AdminDashboard() {
     setShowSubscriptionModal(true);
   };
 
+  const handleDeleteSubscription = async (subscription: any) => {
+    if (!userInfo) return;
+    try {
+      const res = await fetch(`/api/v1/subscriptions/${subscription.id}`, {
+        method: 'DELETE',
+        headers: {
+          'x-tenant-id': userInfo.tenantId,
+        }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const msg = data?.message || 'Erro ao excluir assinatura';
+        toast.error(msg);
+        return;
+      }
+      toast.success('Assinatura excluída com sucesso!');
+      await loadSubscriptions();
+    } catch (err) {
+      console.error('Erro ao excluir assinatura:', err);
+      toast.error('Erro ao excluir assinatura');
+    }
+  };
+
   // Função para atualizar dados manualmente
   const refreshData = async () => {
     if (!userInfo) return;
@@ -564,7 +631,10 @@ export default function AdminDashboard() {
         console.log('👤 Usuário carregado:', data);
         setUserInfo({
           tenantId: data.user.tenantId,
-          barbershopId: data.user.barbershopId
+          barbershopId: data.user.barbershopId,
+          tenantPlan: data.tenant?.plan,
+          tenantStatus: data.tenant?.status,
+          tenantCreatedAt: data.tenant?.createdAt
         });
       } else {
         console.error('Erro ao carregar informações do usuário:', response.status, response.statusText);
@@ -805,6 +875,15 @@ export default function AdminDashboard() {
     e.preventDefault();
 
     try {
+      // Verificar limite de barbeiros apenas para criação de novos barbeiros
+      if (!editingEmployee && employeeForm.role === 'BARBER') {
+        const currentBarbers = (employees || []).filter(e => e.role === 'BARBER' && e.active);
+        if (currentBarbers.length >= 15) {
+          toast.error('Limite máximo de 15 barbeiros atingido! Não é possível criar mais barbeiros.');
+          return;
+        }
+      }
+
       if (editingEmployee) {
         // Editar funcionário existente
         const response = await fetch(`/api/v1/employees/${editingEmployee.id}`, {
@@ -1530,6 +1609,110 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen w-full bg-black flex dashboard-container">
+      {/* Banner Trial / Planos */}
+      {(() => {
+        const tenantStatus = (userInfo as any)?.tenantStatus || (userInfo as any)?.status;
+        const isTrialActive = tenantStatus === 'TRIALING' || (trialTimeLeft && !trialTimeLeft.expired);
+
+        if (isTrialActive && trialTimeLeft && !trialTimeLeft.expired) {
+          return (
+            <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50">
+              <div className="bg-indigo-600/90 text-white px-4 py-2 rounded shadow-lg flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>
+                  {trialTimeLeft.days > 0 && `${trialTimeLeft.days} dia${trialTimeLeft.days === 1 ? '' : 's'}`}
+                  {trialTimeLeft.days > 0 && trialTimeLeft.hours > 0 && ' e '}
+                  {trialTimeLeft.hours > 0 && `${trialTimeLeft.hours}h`}
+                  {trialTimeLeft.days === 0 && trialTimeLeft.hours === 0 && 'Menos de 1h'} restantes
+                </span>
+              </div>
+            </div>
+          );
+        }
+        // Trial expirado - mostrar bloqueio
+        if (trialTimeLeft && trialTimeLeft.expired) {
+          return (
+            <>
+              {/* Banner de aviso */}
+              <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50">
+                <div className="bg-amber-600/90 text-white px-4 py-2 rounded shadow-lg flex items-center gap-3">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856C18.403 20 20 18.403 20 16.586V7.414C20 5.597 18.403 4 16.586 4H7.414C5.597 4 4 5.597 4 7.414v9.172C4 18.403 5.597 20 7.414 20z" />
+                  </svg>
+                  <span>Período grátis encerrado. Escolha um plano para continuar.</span>
+                  <button
+                    onClick={() => setShowSubscriptionModal(true)}
+                    className="bg-white/90 text-amber-700 px-3 py-1 rounded font-medium hover:bg-white"
+                  >
+                    Assinar agora
+                  </button>
+                </div>
+              </div>
+
+              {/* Overlay de bloqueio */}
+              <div className="fixed inset-0 bg-black/80 z-40 flex items-center justify-center">
+                <div className="bg-white rounded-lg p-8 max-w-md mx-4 text-center">
+                  <div className="mb-6">
+                    <svg className="w-16 h-16 text-amber-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856C18.403 20 20 18.403 20 16.586V7.414C20 5.597 18.403 4 16.586 4H7.414C5.597 4 4 5.597 4 7.414v9.172C4 18.403 5.597 20 7.414 20z" />
+                    </svg>
+                    <h2 className="text-2xl font-bold text-gray-900 mb-2">Período Grátis Encerrado</h2>
+                    <p className="text-gray-600 mb-6">
+                      Seu período de teste de 5 dias chegou ao fim. Para continuar usando a plataforma,
+                      escolha um dos nossos planos.
+                    </p>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="bg-gray-50 p-4 rounded-lg text-left">
+                      <h3 className="font-semibold text-gray-900 mb-2">Planos Disponíveis:</h3>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span>• Plano Simples:</span>
+                          <span className="font-medium">1-3 barbeiros</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>• Plano Intermediário:</span>
+                          <span className="font-medium">1-8 barbeiros</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>• Plano Premium:</span>
+                          <span className="font-medium">até 15 barbeiros</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => setShowSubscriptionModal(true)}
+                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+                    >
+                      Escolher Plano Agora
+                    </button>
+
+                    <button
+                      onClick={async () => {
+                        try {
+                          await fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'include' });
+                        } catch { }
+                        try { if (typeof window !== 'undefined') localStorage.removeItem('access_token'); } catch { }
+                        window.location.href = '/login';
+                      }}
+                      className="w-full bg-gray-200 hover:bg-gray-300 text-gray-700 px-6 py-3 rounded-lg font-medium transition-colors"
+                    >
+                      Sair da Conta
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </>
+          );
+        }
+
+        // Caso padrão - não mostrar banner se não há trial
+        return null;
+      })()}
       {/* Menu Lateral Vertical */}
       <div className="w-72 bg-black shadow-2xl border-r border-gray-800 flex flex-col flex-shrink-0">
         {/* Header do Menu */}
@@ -1914,15 +2097,6 @@ export default function AdminDashboard() {
 
                   {/* Filtros */}
                   <div className="space-y-3 -ml-6">
-                    <div className="flex items-center space-x-2 text-white">
-                      <CogIcon className="w-5 h-5" />
-                      <span className="font-medium">Buscar e Agendar</span>
-                    </div>
-
-                    <div className="flex items-center space-x-2 text-white">
-                      <CogIcon className="w-5 h-5" />
-                      <span className="font-medium">Seleção de Profissionais</span>
-                    </div>
 
                     <div>
                       <label className="block text-xs text-slate-400 mb-1">Nome do profissional</label>
@@ -1946,14 +2120,6 @@ export default function AdminDashboard() {
                       </select>
                     </div>
 
-                    <div>
-                      <label className="block text-xs text-slate-400 mb-1">Fechamento de Conta</label>
-                      <select className="w-full px-2 py-1.5 bg-gray-900 border border-gray-700 rounded text-white text-xs">
-                        <option>Todos</option>
-                        <option>Pago</option>
-                        <option>Pendente</option>
-                      </select>
-                    </div>
 
                     <div>
                       <label className="block text-xs text-slate-400 mb-1">Tamanho da agenda</label>
@@ -2042,136 +2208,213 @@ export default function AdminDashboard() {
 
                   {/* Cabeçalho dos Profissionais (colunas com rolagem horizontal) */}
                   <div className="bg-gray-900 border-b border-gray-800 overflow-x-auto">
-                    {(() => {
-                      const barbers = (employees || []).filter(e => e.role === 'BARBER' && e.active);
-                      const getColW = (n: number) => (n <= 6 ? 220 : n <= 10 ? 180 : n <= 14 ? 150 : n <= 20 ? 120 : 100);
-                      const COL_W = getColW(barbers.length);
-                      if (barbers.length === 0) {
+                    <div className="min-w-full">
+                      {/* Indicador de quantidade de barbeiros */}
+                      {(() => {
+                        const barbers = (employees || []).filter(e => e.role === 'BARBER' && e.active);
+                        if (barbers.length > 8) {
+                          return (
+                            <div className="bg-blue-900/30 border-b border-blue-800 px-4 py-2">
+                              <div className="text-xs text-blue-300 flex items-center gap-2">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                                </svg>
+                                {barbers.length} barbeiros ativos • Layout otimizado para até 15 barbeiros
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
+                      {(() => {
+                        const barbers = (employees || []).filter(e => e.role === 'BARBER' && e.active);
+                        // Calcular largura dinâmica otimizada para máximo 15 barbeiros
+                        const getColW = (n: number) => {
+                          if (n === 0) return 0;
+
+                          // Largura mínima e máxima otimizada para até 15 barbeiros
+                          const minWidth = 120; // Mínimo confortável para legibilidade
+                          const maxWidth = 500; // Máximo para aproveitar bem o espaço
+
+                          // Calcular largura baseada no espaço disponível
+                          const availableWidth = 1400 - 80; // 80px para coluna de horários, mais espaço total
+                          const calculatedWidth = Math.floor(availableWidth / n);
+
+                          // Aplicar limites e ajustar para casos especiais
+                          let finalWidth = Math.max(minWidth, Math.min(maxWidth, calculatedWidth));
+
+                          // Otimizações específicas para diferentes quantidades
+                          if (n === 1) finalWidth = Math.min(600, availableWidth); // Um barbeiro ocupa bem o espaço
+                          if (n === 2) finalWidth = Math.min(500, Math.floor(availableWidth / 2)); // Dois barbeiros bem distribuídos
+                          if (n === 3) finalWidth = Math.min(400, Math.floor(availableWidth / 3)); // Três barbeiros confortáveis
+                          if (n >= 4 && n <= 6) finalWidth = Math.min(300, Math.floor(availableWidth / n)); // 4-6 barbeiros: bom espaço
+                          if (n >= 7 && n <= 10) finalWidth = Math.min(200, Math.floor(availableWidth / n)); // 7-10 barbeiros: espaço adequado
+                          if (n >= 11 && n <= 15) finalWidth = Math.min(150, Math.floor(availableWidth / n)); // 11-15 barbeiros: compacto mas legível
+
+                          return finalWidth;
+                        };
+                        const COL_W = getColW(barbers.length);
+                        if (barbers.length === 0) {
+                          return (
+                            <div className="flex">
+                              <div className="w-20 bg-gray-900 border-r border-gray-800 p-2">
+                                <div className="text-xs text-gray-400 text-center">Profissional</div>
+                              </div>
+                              <div className="flex-1 p-2">
+                                <span className="text-slate-400 text-sm">Nenhum barbeiro ativo</span>
+                              </div>
+                            </div>
+                          );
+                        }
+
                         return (
-                          <div className="flex">
-                            <div className="w-20 bg-gray-900 border-r border-gray-800 p-2">
-                              <div className="text-xs text-gray-400 text-center">Profissional</div>
-                            </div>
-                            <div className="flex-1 p-2">
-                              <span className="text-slate-400 text-sm">Nenhum barbeiro ativo</span>
-                            </div>
+                          <div
+                            className="grid"
+                            style={{
+                              gridTemplateColumns: `80px repeat(${barbers.length}, 1fr)`,
+                              minWidth: `${80 + (barbers.length * 120)}px`, // Largura mínima otimizada para até 15 barbeiros
+                              maxWidth: barbers.length > 8 ? 'none' : '100%' // Scroll horizontal para 9+ barbeiros
+                            }}
+                          >
+                            <div className="bg-gray-900 border-r border-gray-800 p-2 text-xs text-gray-400 text-center">Profissional</div>
+                            {barbers.map(emp => (
+                              <div key={emp.id} className="p-2 text-white font-medium text-xs text-center border-r border-gray-800 truncate">
+                                {emp.name}
+                              </div>
+                            ))}
                           </div>
                         );
-                      }
-
-                      return (
-                        <div
-                          className="grid"
-                          style={{ gridTemplateColumns: `80px repeat(${barbers.length}, ${COL_W}px)` }}
-                        >
-                          <div className="bg-gray-900 border-r border-gray-800 p-2 text-xs text-gray-400 text-center">Profissional</div>
-                          {barbers.map(emp => (
-                            <div key={emp.id} className="p-2 text-white font-medium text-xs text-center border-r border-gray-800 truncate">
-                              {emp.name}
-                            </div>
-                          ))}
-                        </div>
-                      );
-                    })()}
+                      })()}
+                    </div>
                   </div>
 
                   {/* Grade da Agenda com rolagem horizontal e múltiplas colunas */}
                   <div className="overflow-x-auto">
-                    {(() => {
-                      const { startHour, endHour, isClosed } = getOperatingHours();
-                      if (isClosed) {
+                    <div className="min-w-full">
+                      {(() => {
+                        const { startHour, endHour, isClosed } = getOperatingHours();
+                        if (isClosed) {
+                          return (
+                            <div className="h-16 border-b border-slate-700 border-dashed relative flex items-center justify-center">
+                              <span className="text-slate-500 text-sm">Estabelecimento fechado</span>
+                            </div>
+                          );
+                        }
+
+                        const barbers = (employees || []).filter(e => e.role === 'BARBER' && e.active);
+                        // Calcular largura dinâmica otimizada para máximo 15 barbeiros
+                        const getColW = (n: number) => {
+                          if (n === 0) return 0;
+
+                          // Largura mínima e máxima otimizada para até 15 barbeiros
+                          const minWidth = 120; // Mínimo confortável para legibilidade
+                          const maxWidth = 500; // Máximo para aproveitar bem o espaço
+
+                          // Calcular largura baseada no espaço disponível
+                          const availableWidth = 1400 - 80; // 80px para coluna de horários, mais espaço total
+                          const calculatedWidth = Math.floor(availableWidth / n);
+
+                          // Aplicar limites e ajustar para casos especiais
+                          let finalWidth = Math.max(minWidth, Math.min(maxWidth, calculatedWidth));
+
+                          // Otimizações específicas para diferentes quantidades
+                          if (n === 1) finalWidth = Math.min(600, availableWidth); // Um barbeiro ocupa bem o espaço
+                          if (n === 2) finalWidth = Math.min(500, Math.floor(availableWidth / 2)); // Dois barbeiros bem distribuídos
+                          if (n === 3) finalWidth = Math.min(400, Math.floor(availableWidth / 3)); // Três barbeiros confortáveis
+                          if (n >= 4 && n <= 6) finalWidth = Math.min(300, Math.floor(availableWidth / n)); // 4-6 barbeiros: bom espaço
+                          if (n >= 7 && n <= 10) finalWidth = Math.min(200, Math.floor(availableWidth / n)); // 7-10 barbeiros: espaço adequado
+                          if (n >= 11 && n <= 15) finalWidth = Math.min(150, Math.floor(availableWidth / n)); // 11-15 barbeiros: compacto mas legível
+
+                          return finalWidth;
+                        };
+                        const COL_W = getColW(barbers.length);
+                        const totalHours = endHour - startHour + 1;
+                        // Altura fixa da agenda (se ajusta ao viewport, mas é fixa por dia)
+                        const DEFAULT_HEIGHT = 880; // altura base
+                        const heightFromViewport = typeof window !== 'undefined'
+                          ? Math.max(730, Math.min(1030, window.innerHeight - 170))
+                          : DEFAULT_HEIGHT;
+                        const containerHeight = heightFromViewport;
+                        const slotHeight = `${containerHeight / totalHours}px`;
+
+                        const sameDay = (iso: string) => {
+                          const d = new Date(iso);
+                          const yyyy = d.getFullYear();
+                          const mm = String(d.getMonth() + 1).padStart(2, '0');
+                          const dd = String(d.getDate()).padStart(2, '0');
+                          return `${yyyy}-${mm}-${dd}` === selectedDate;
+                        };
+
                         return (
-                          <div className="h-16 border-b border-slate-700 border-dashed relative flex items-center justify-center">
-                            <span className="text-slate-500 text-sm">Estabelecimento fechado</span>
-                          </div>
-                        );
-                      }
-
-                      const barbers = (employees || []).filter(e => e.role === 'BARBER' && e.active);
-                      const getColW = (n: number) => (n <= 6 ? 220 : n <= 10 ? 180 : n <= 14 ? 150 : n <= 20 ? 120 : 100);
-                      const COL_W = getColW(barbers.length);
-                      const totalHours = endHour - startHour + 1;
-                      // Altura fixa da agenda (se ajusta ao viewport, mas é fixa por dia)
-                      const DEFAULT_HEIGHT = 880; // altura base
-                      const heightFromViewport = typeof window !== 'undefined'
-                        ? Math.max(730, Math.min(1030, window.innerHeight - 170))
-                        : DEFAULT_HEIGHT;
-                      const containerHeight = heightFromViewport;
-                      const slotHeight = `${containerHeight / totalHours}px`;
-
-                      const sameDay = (iso: string) => {
-                        const d = new Date(iso);
-                        const yyyy = d.getFullYear();
-                        const mm = String(d.getMonth() + 1).padStart(2, '0');
-                        const dd = String(d.getDate()).padStart(2, '0');
-                        return `${yyyy}-${mm}-${dd}` === selectedDate;
-                      };
-
-                      return (
-                        <div
-                          className="grid relative"
-                          style={{ gridTemplateColumns: `80px repeat(${barbers.length}, ${COL_W}px)`, height: `${containerHeight}px` }}
-                        >
-                          {/* Coluna fixa de horários */}
-                          <div className="bg-slate-800 border-r border-slate-700">
-                            {Array.from({ length: totalHours }).map((_, idx) => {
-                              const hour = startHour + idx;
-                              const isSpecial = hour === startHour || hour === endHour;
-                              return (
-                                <div
-                                  key={hour}
-                                  className={`border-b border-slate-700 flex items-start justify-center text-xs pt-1 ${isSpecial ? 'bg-[#01ABFE]/20 text-[#01ABFE]' : 'text-slate-400'}`}
-                                  style={{ height: slotHeight }}
-                                >
-                                  {hour}h
-                                </div>
-                              );
-                            })}
-                          </div>
-
-                          {/* Colunas de agenda por barbeiro */}
-                          {barbers.map(emp => (
-                            <div key={emp.id} className="relative border-r border-slate-700">
-                              {/* Linhas de hora no fundo de cada coluna */}
+                          <div
+                            className="grid relative"
+                            style={{
+                              gridTemplateColumns: `80px repeat(${barbers.length}, 1fr)`,
+                              height: `${containerHeight}px`,
+                              minWidth: `${80 + (barbers.length * 120)}px` // Largura mínima para evitar colunas muito estreitas
+                            }}
+                          >
+                            {/* Coluna fixa de horários */}
+                            <div className="bg-slate-800 border-r border-slate-700">
                               {Array.from({ length: totalHours }).map((_, idx) => {
                                 const hour = startHour + idx;
-                                const isLastHour = hour === endHour;
+                                const isSpecial = hour === startHour || hour === endHour;
                                 return (
-                                  <div key={hour} className="relative" style={{ height: slotHeight }}>
-                                    <div className="absolute top-0 left-0 right-0 h-px bg-gray-700"></div>
-                                    <div className="absolute top-1/2 left-0 right-0 h-px bg-gray-700 border-dashed border-t"></div>
-                                    {!isLastHour && <div className="absolute bottom-0 left-0 right-0 h-px bg-gray-700"></div>}
+                                  <div
+                                    key={hour}
+                                    className={`border-b border-slate-700 flex items-start justify-center text-xs pt-1 ${isSpecial ? 'bg-[#01ABFE]/20 text-[#01ABFE]' : 'text-slate-400'}`}
+                                    style={{ height: slotHeight }}
+                                  >
+                                    {hour}h
                                   </div>
                                 );
                               })}
+                            </div>
 
-                              {/* Agendamentos deste barbeiro */}
-                              {(appointments || [])
-                                .filter(a => a.status === 'CONFIRMED' && a.employeeId === emp.id && sameDay(a.startAt))
-                                .map(appt => {
-                                  const start = new Date(appt.startAt);
-                                  const end = new Date(appt.endAt);
-                                  const startHoursFromOpen = (start.getHours() + start.getMinutes() / 60) - startHour;
-                                  const durationHours = Math.max(0.25, (end.getTime() - start.getTime()) / 3600000);
-                                  const top = Math.max(0, (startHoursFromOpen / totalHours) * containerHeight);
-                                  const height = Math.max(22, (durationHours / totalHours) * containerHeight);
+                            {/* Colunas de agenda por barbeiro */}
+                            {barbers.map(emp => (
+                              <div key={emp.id} className="relative border-r border-slate-700">
+                                {/* Linhas de hora no fundo de cada coluna */}
+                                {Array.from({ length: totalHours }).map((_, idx) => {
+                                  const hour = startHour + idx;
+                                  const isLastHour = hour === endHour;
                                   return (
-                                    <div
-                                      key={appt.id}
-                                      className="absolute left-1 right-1 rounded border border-sky-700 bg-sky-600/30 text-sky-100 px-1 py-0.5 overflow-hidden"
-                                      style={{ top: `${top}px`, height: `${height}px` }}
-                                      title={`${emp.name || ''} • ${appt.service?.name || ''}`}
-                                    >
-                                      <div className="text-[11px] font-medium leading-4 truncate">{appt.service?.name || 'Serviço'}</div>
-                                      <div className="text-[10px] opacity-80 leading-4 truncate">{(appt.clients?.name ? appt.clients.name + ' • ' : '') + (start.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }))}</div>
+                                    <div key={hour} className="relative" style={{ height: slotHeight }}>
+                                      <div className="absolute top-0 left-0 right-0 h-px bg-gray-700"></div>
+                                      <div className="absolute top-1/2 left-0 right-0 h-px bg-gray-700 border-dashed border-t"></div>
+                                      {!isLastHour && <div className="absolute bottom-0 left-0 right-0 h-px bg-gray-700"></div>}
                                     </div>
                                   );
                                 })}
-                            </div>
-                          ))}
-                        </div>
-                      );
-                    })()}
+
+                                {/* Agendamentos deste barbeiro */}
+                                {(appointments || [])
+                                  .filter(a => a.status === 'CONFIRMED' && a.employeeId === emp.id && sameDay(a.startAt))
+                                  .map(appt => {
+                                    const start = new Date(appt.startAt);
+                                    const end = new Date(appt.endAt);
+                                    const startHoursFromOpen = (start.getHours() + start.getMinutes() / 60) - startHour;
+                                    const durationHours = Math.max(0.25, (end.getTime() - start.getTime()) / 3600000);
+                                    const top = Math.max(0, (startHoursFromOpen / totalHours) * containerHeight);
+                                    const height = Math.max(22, (durationHours / totalHours) * containerHeight);
+                                    return (
+                                      <div
+                                        key={appt.id}
+                                        className="absolute left-1 right-1 rounded border border-sky-700 bg-sky-600/30 text-sky-100 px-1 py-0.5 overflow-hidden"
+                                        style={{ top: `${top}px`, height: `${height}px` }}
+                                        title={`${emp.name || ''} • ${appt.service?.name || ''}`}
+                                      >
+                                        <div className="text-[11px] font-medium leading-4 truncate">{appt.service?.name || 'Serviço'}</div>
+                                        <div className="text-[10px] opacity-80 leading-4 truncate">{(appt.clients?.name ? appt.clients.name + ' • ' : '') + (start.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }))}</div>
+                                      </div>
+                                    );
+                                  })}
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2192,7 +2435,7 @@ export default function AdminDashboard() {
                         <label className="block text-sm font-medium text-gray-700 mb-1">Nome da Barbearia</label>
                         <input
                           type="text"
-                          value={configurations.name}
+                          value={configurations.name || ''}
                           onChange={(e) => handleSlugChange(e.target.value)}
                           onBlur={() => saveConfigurations(false, undefined, undefined, undefined, undefined, configurations.name, configurations.slug)}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -2207,7 +2450,7 @@ export default function AdminDashboard() {
                           </span>
                           <input
                             type="text"
-                            value={configurations.slug}
+                            value={configurations.slug || ''}
                             onChange={(e) => { handleConfigChange('slug', generateSlug(e.target.value)); }}
                             onBlur={() => saveConfigurations(false, undefined, undefined, undefined, undefined, configurations.name, configurations.slug)}
                             className="flex-1 px-3 py-2 border border-gray-300 rounded-r-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -2221,7 +2464,7 @@ export default function AdminDashboard() {
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
                         <textarea
-                          value={configurations.description}
+                          value={configurations.description || ''}
                           onChange={(e) => handleConfigChange('description', e.target.value)}
                           rows={3}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -2239,7 +2482,7 @@ export default function AdminDashboard() {
                         <label className="block text-sm font-medium text-gray-700 mb-1">Endereço</label>
                         <input
                           type="text"
-                          value={configurations.address}
+                          value={configurations.address || ''}
                           onChange={(e) => handleConfigChange('address', e.target.value)}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                           placeholder="Rua, número - Bairro, Cidade"
@@ -2249,7 +2492,7 @@ export default function AdminDashboard() {
                         <label className="block text-sm font-medium text-gray-700 mb-1">Telefone</label>
                         <input
                           type="text"
-                          value={configurations.phone}
+                          value={configurations.phone || ''}
                           onChange={(e) => handleConfigChange('phone', e.target.value)}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                           placeholder="(11) 99999-9999"
@@ -2259,7 +2502,7 @@ export default function AdminDashboard() {
                         <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
                         <input
                           type="email"
-                          value={configurations.email}
+                          value={configurations.email || ''}
                           onChange={(e) => handleConfigChange('email', e.target.value)}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                           placeholder="contato@barbearia.com"
@@ -2269,7 +2512,7 @@ export default function AdminDashboard() {
                         <label className="block text-sm font-medium text-gray-700 mb-1">Link do Instagram</label>
                         <input
                           type="text"
-                          value={configurations.instagram}
+                          value={configurations.instagram || ''}
                           onChange={(e) => handleConfigChange('instagram', e.target.value)}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                           placeholder="https://instagram.com/suapagina"
@@ -2359,7 +2602,7 @@ export default function AdminDashboard() {
                             </button>
                           )}
                         </div>
-                        <p className="text-xs text-gray-500 mt-1">PNG, JPG até 5MB. Recomendado: 1200x400px</p>
+                        <p className="text-xs text-gray-500 mt-1">Largura: Mínimo 800px, ideal 1200px+<br />Altura: Mínimo 600px, ideal 800px+<br />Formato: JPG ou PNG</p>
                       </div>
                     </div>
                   </div>
@@ -2381,7 +2624,7 @@ export default function AdminDashboard() {
                                 <input
                                   type="text"
                                   placeholder="09:00"
-                                  value={dayConfig.open}
+                                  value={dayConfig.open || ''}
                                   maxLength={5}
                                   onChange={(e) => {
                                     const value = maskHHmm(e.target.value);
@@ -2414,7 +2657,7 @@ export default function AdminDashboard() {
                                 <input
                                   type="text"
                                   placeholder="18:00"
-                                  value={dayConfig.close}
+                                  value={dayConfig.close || ''}
                                   maxLength={5}
                                   onChange={(e) => {
                                     const value = maskHHmm(e.target.value);
@@ -2447,10 +2690,14 @@ export default function AdminDashboard() {
                                 <input
                                   type="checkbox"
                                   checked={!dayConfig.closed}
-                                  onChange={(e) => handleConfigChange('openingHours', {
-                                    ...configurations.openingHours,
-                                    [dayKey]: { ...dayConfig, closed: !e.target.checked }
-                                  })}
+                                  onChange={(e) => {
+                                    handleConfigChange('openingHours', {
+                                      ...configurations.openingHours,
+                                      [dayKey]: { ...dayConfig, closed: !e.target.checked }
+                                    });
+                                    // Disparar salvamento automático quando checkbox muda
+                                    setTimeout(() => saveConfigurations(true), 0);
+                                  }}
                                   className="h-4 w-4 text-[#4FC9FF] focus:ring-[#4FC9FF] border-gray-300 rounded bg-white"
                                 />
                                 <span className="ml-2 text-xs text-gray-600">Aberto</span>
@@ -2614,7 +2861,7 @@ export default function AdminDashboard() {
                       </label>
                       <input
                         type="text"
-                        value={serviceForm.name}
+                        value={serviceForm.name || ''}
                         onChange={(e) => setServiceForm(prev => ({ ...prev, name: e.target.value }))}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                         required
@@ -2626,7 +2873,7 @@ export default function AdminDashboard() {
                       </label>
                       <input
                         type="number"
-                        value={serviceForm.duration_min}
+                        value={serviceForm.duration_min || 0}
                         onChange={(e) => setServiceForm(prev => ({ ...prev, duration_min: parseInt(e.target.value) || 0 }))}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                         min="15"
@@ -2640,7 +2887,7 @@ export default function AdminDashboard() {
                       </label>
                       <input
                         type="text"
-                        value={serviceForm.price_reais}
+                        value={serviceForm.price_reais || '0,00'}
                         onChange={(e) => {
                           const value = e.target.value;
                           setServiceForm(prev => ({
@@ -2659,7 +2906,7 @@ export default function AdminDashboard() {
                         Descrição
                       </label>
                       <textarea
-                        value={serviceForm.description}
+                        value={serviceForm.description || ''}
                         onChange={(e) => setServiceForm(prev => ({ ...prev, description: e.target.value }))}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                         rows={3}
@@ -2716,7 +2963,7 @@ export default function AdminDashboard() {
                       </label>
                       <input
                         type="text"
-                        value={employeeForm.name}
+                        value={employeeForm.name || ''}
                         onChange={(e) => setEmployeeForm(prev => ({ ...prev, name: e.target.value }))}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                         required
@@ -2727,7 +2974,7 @@ export default function AdminDashboard() {
                         Cargo
                       </label>
                       <select
-                        value={employeeForm.role}
+                        value={employeeForm.role || 'BARBER'}
                         onChange={(e) => setEmployeeForm(prev => ({ ...prev, role: e.target.value }))}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
@@ -2742,7 +2989,7 @@ export default function AdminDashboard() {
                       </label>
                       <input
                         type="email"
-                        value={employeeForm.email}
+                        value={employeeForm.email || ''}
                         onChange={(e) => setEmployeeForm(prev => ({ ...prev, email: e.target.value }))}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                         required
@@ -2754,7 +3001,7 @@ export default function AdminDashboard() {
                       </label>
                       <input
                         type="tel"
-                        value={employeeForm.phone}
+                        value={employeeForm.phone || ''}
                         onChange={(e) => setEmployeeForm(prev => ({ ...prev, phone: e.target.value }))}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                         required
@@ -2771,6 +3018,27 @@ export default function AdminDashboard() {
                         Funcionário ativo
                       </label>
                     </div>
+
+                    {/* Aviso sobre limite de barbeiros */}
+                    {!editingEmployee && employeeForm.role === 'BARBER' && (employees || []).filter(e => e.role === 'BARBER' && e.active).length >= 15 && (
+                      <div className="bg-red-50 border border-red-200 rounded-md p-3">
+                        <div className="flex">
+                          <div className="flex-shrink-0">
+                            <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                            </svg>
+                          </div>
+                          <div className="ml-3">
+                            <h3 className="text-sm font-medium text-red-800">
+                              Limite de barbeiros atingido
+                            </h3>
+                            <div className="mt-2 text-sm text-red-700">
+                              <p>Você já possui 15 barbeiros ativos. Não é possível criar mais barbeiros.</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     <div className="flex justify-end space-x-3 pt-4">
                       <button
                         type="button"
@@ -2785,7 +3053,11 @@ export default function AdminDashboard() {
                       </button>
                       <button
                         type="submit"
-                        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
+                        disabled={!editingEmployee && employeeForm.role === 'BARBER' && (employees || []).filter(e => e.role === 'BARBER' && e.active).length >= 15}
+                        className={`px-4 py-2 text-sm font-medium text-white rounded-md ${!editingEmployee && employeeForm.role === 'BARBER' && (employees || []).filter(e => e.role === 'BARBER' && e.active).length >= 15
+                          ? 'bg-gray-400 cursor-not-allowed'
+                          : 'bg-blue-600 hover:bg-blue-700'
+                          }`}
                       >
                         {editingEmployee ? 'Atualizar' : 'Criar'}
                       </button>
@@ -2903,6 +3175,12 @@ export default function AdminDashboard() {
                           className="flex-1 bg-gray-100 text-gray-700 px-4 py-3 rounded-lg font-semibold hover:bg-gray-200 transition-colors"
                         >
                           Editar
+                        </button>
+                        <button
+                          onClick={() => handleDeleteSubscription(subscription)}
+                          className="flex-1 bg-red-50 text-red-700 px-4 py-3 rounded-lg font-semibold hover:bg-red-100 transition-colors"
+                        >
+                          Excluir
                         </button>
                         <button className="flex-1 bg-[#01ABFE] text-white px-4 py-3 rounded-lg font-semibold hover:bg-[#0099E6] transition-colors">
                           Ver Assinantes ({subscription.clientSubscriptions?.length || 0})

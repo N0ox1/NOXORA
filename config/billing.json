@@ -150,7 +150,7 @@
     "invoice.payment_succeeded",
     "invoice.payment_failed"
   ],
-  "trial_days": 14,
+  "trial_days": 5,
   "grace_period_days": 7,
   "auto_upgrade": true,
   "downgrade_restrictions": {

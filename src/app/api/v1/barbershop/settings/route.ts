@@ -110,8 +110,8 @@ export async function GET(req: NextRequest) {
         };
 
         // Formatar horários do banco
-        const formattedWorkingHours = barbershop.workingHours ? Object.keys(barbershop.workingHours).reduce((acc, day) => {
-            const dayData = barbershop.workingHours[day];
+        const formattedWorkingHours = barbershop.workingHours ? Object.keys(barbershop.workingHours as any).reduce((acc, day) => {
+            const dayData = (barbershop.workingHours as any)[day];
             return {
                 ...acc,
                 [day]: {

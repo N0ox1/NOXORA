@@ -72,6 +72,12 @@ export async function GET(request: NextRequest) {
             );
         }
 
+        // Carregar tenant para expor dados de trial/plan
+        const tenant = await prisma.tenant.findUnique({
+            where: { id: user.tenantId },
+            select: { id: true, plan: true, status: true, createdAt: true }
+        });
+
         return NextResponse.json({
             user: {
                 id: user.id,
@@ -81,6 +87,7 @@ export async function GET(request: NextRequest) {
                 tenantId: user.tenantId,
                 barbershopId: user.barbershopId,
             },
+            tenant,
         });
 
     } catch (error) {
